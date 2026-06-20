@@ -4,6 +4,9 @@
 [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF.svg?logo=vite&logoColor=white)](https://vite.dev/)
 [![React](https://img.shields.io/badge/React-19.x-61DAFB.svg?logo=react&logoColor=white)](https://react.dev/)
 
+<img width="1724" height="994" alt="image" src="https://github.com/user-attachments/assets/709a6132-7d9c-4146-8688-3e79da2e3077" />
+
+
 A premium, minimal New Tab homepage extension featuring a responsive digital clock, customizable pinned connection nodes, built-in search engine routing, and live telemetry system metrics simulation—designed with a sleek, futuristic cybernetic network aesthetic.
 
 ---
