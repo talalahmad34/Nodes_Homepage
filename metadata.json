@@ -1,0 +1,6 @@
+{
+  "name": "Futuristic Tech Homepage Extension",
+  "description": "A clean, minimal new tab homepage with responsive digital clock, customizable pinned sites, search console, and live utility controls designed with futuristic networking vibes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
