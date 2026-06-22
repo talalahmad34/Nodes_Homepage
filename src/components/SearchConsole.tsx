@@ -214,7 +214,7 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
       </form>
 
       {/* Dedicated Pinned AI Infrastructure Sections */}
-      <div className="w-full mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 z-10" id="dedicated-ai-terminals-wrapper">
+      <div className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10" id="dedicated-ai-terminals-wrapper">
         {AI_PORTALS.map((portal) => {
           return (
             <a

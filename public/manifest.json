@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nodes Homepage Extension",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "A clean, minimal new tab homepage with responsive digital clock, customizable pinned sites, search console, and live utility controls designed with futuristic networking vibes.",
   "chrome_url_overrides": {
     "newtab": "index.html"
@@ -11,5 +11,8 @@
     "32": "icon.svg",
     "48": "icon.svg",
     "128": "icon.svg"
-  }
+  },
+  "permissions": [
+    "system.network"
+  ]
 }

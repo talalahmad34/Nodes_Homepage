@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, Cpu, X, Globe, User, Palette, Eye, ShieldCheck, Heart, Terminal, FolderSync } from 'lucide-react';
 import { PinnedSite, UserSettings, SystemLog, SystemTheme } from './types';
@@ -109,9 +109,13 @@ const DEFAULT_SETTINGS: UserSettings = {
   activeBackground: 'network',
   showAnalogOverlay: false,
   techPingDelaySim: true,
+  showWorkProgress: false,
+  workStart: '09:00',
+  workEnd: '17:00',
 };
 
 export default function App() {
+  const telemetryRef = useRef<HTMLTextAreaElement>(null);
   const [settings, setSettings] = useState<UserSettings>(() => {
     try {
       const stored = localStorage.getItem('netgrid_settings');
@@ -146,6 +150,7 @@ export default function App() {
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [appUrl, setAppUrl] = useState('');
+  const [localIp, setLocalIp] = useState('192.168.1.104');
 
   // Auto-save settings when updated
   useEffect(() => {
@@ -157,11 +162,49 @@ export default function App() {
     localStorage.setItem('netgrid_pinned_sites', JSON.stringify(pinnedSites));
   }, [pinnedSites]);
 
+  // Sync state to telemetry text area ref when state updates
+  useEffect(() => {
+    if (telemetryRef.current && document.activeElement !== telemetryRef.current) {
+      telemetryRef.current.value = JSON.stringify({ settings, pinnedSites });
+    }
+  }, [settings, pinnedSites, isSettingsOpen]);
+
   // Read environment variable injects at startup (AI Studio runtime variables)
   useEffect(() => {
     // Read window origin as backup, or direct process env variables if present
     const envUrl = process.env.APP_URL || '';
     setAppUrl(envUrl);
+  }, []);
+
+  // Get actual local IP address on startup and listen for network changes
+  useEffect(() => {
+    const updateIp = () => {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.system && chrome.system.network) {
+          chrome.system.network.getNetworkInterfaces((interfaces) => {
+            const ipv4Interface = interfaces.find(
+              (iface) =>
+                iface.address.includes('.') && 
+                !iface.address.startsWith('127.0')
+            );
+            if (ipv4Interface) {
+              setLocalIp(ipv4Interface.address);
+            }
+          });
+        }
+      } catch (e) {
+        // Fail silent
+      }
+    };
+
+    updateIp();
+
+    if (typeof chrome !== 'undefined' && chrome.system && chrome.system.network && chrome.system.network.onNetworkLinkChanged) {
+      chrome.system.network.onNetworkLinkChanged.addListener(updateIp);
+      return () => {
+        chrome.system.network.onNetworkLinkChanged.removeListener(updateIp);
+      };
+    }
   }, []);
 
   // System actions telemetry log callback function, stabilized safely to prevent triggers
@@ -264,8 +307,8 @@ export default function App() {
       />
 
       {/* Floating System Header navigation styled to match Elegant Dark */}
-      <header className="w-full max-w-7xl px-5 pt-3 sm:pt-4 pb-2 flex justify-between items-start z-10 select-none border-b border-neutral-900/50" id="primary-app-header">
-        <div className="space-y-1 font-mono">
+      <header className="w-full max-w-none px-6 sm:px-10 pt-3 sm:pt-4 pb-2 flex justify-between items-center z-10 select-none border-b border-neutral-900/50" id="primary-app-header">
+        <div className="space-y-1 font-mono w-1/3">
           <div className="flex items-center gap-2">
             <div 
               className="w-2.5 h-2.5 rounded-full animate-pulse" 
@@ -281,8 +324,21 @@ export default function App() {
           <h2 className="text-xs tracking-widest text-neutral-400 uppercase">CORE_NODE // NETGRID-HK92</h2>
         </div>
 
+        {/* Center greetings tag inline with header info */}
+        <div className="flex justify-center w-1/3">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center font-mono select-none"
+          >
+            <h2 className="text-xs md:text-sm text-neutral-100 font-bold tracking-wider uppercase font-mono px-3.5 py-1 bg-neutral-950/40 border border-neutral-900 rounded-full inline-block">
+              {calculateGreeting()}
+            </h2>
+          </motion.div>
+        </div>
+
         {/* Action controls button links & Network display from design */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center justify-end gap-6 w-1/3">
           <div className="text-right space-y-1 font-mono hidden sm:block font-medium">
             <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Network Latency</div>
             <div className="text-sm text-neutral-300">14.2ms <span className="text-neutral-600">/</span> 1.2gbps</div>
@@ -300,21 +356,7 @@ export default function App() {
       </header>
 
       {/* Main Body Centered Column */}
-      <main className="w-full max-w-7xl flex flex-col items-center justify-center px-4 space-y-4 md:space-y-4.5 lg:space-y-5 flex-grow z-10 py-1 sm:py-1.5">
-        
-        {/* Customized Dynamic Greetings Tag */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center font-mono select-none"
-        >
-          <span className="text-xs text-neutral-400 uppercase tracking-[0.35em] block mb-1">
-            CORE CONTROL TERMINAL
-          </span>
-          <h2 className="text-md md:text-lg text-neutral-100 font-bold tracking-wider uppercase font-mono px-4 py-1.5 bg-neutral-950/40 border border-neutral-900 rounded-full inline-block">
-            {calculateGreeting()}
-          </h2>
-        </motion.div>
+      <main className="w-full max-w-none px-6 sm:px-10 flex flex-col items-center justify-start pt-1 sm:pt-2 md:pt-3 space-y-2 md:space-y-3 lg:space-y-3.5 flex-grow z-10 py-1 sm:py-1.5">
 
         {/* 1. Futuristic Digital Clock Widget */}
         <FuturisticClock
@@ -343,9 +385,9 @@ export default function App() {
       </main>
 
       {/* Footer Status Bar from Elegant Dark guidelines */}
-      <footer className="w-full max-w-7xl px-5 py-3 border-t border-neutral-800/40 mt-3 sm:mt-4 flex justify-between items-center text-[10.5px] uppercase tracking-[0.25em] text-neutral-400 z-10 font-mono">
+      <footer className="w-full max-w-none px-6 sm:px-10 py-3 border-t border-neutral-800/40 mt-3 sm:mt-4 flex justify-between items-center text-[10.5px] uppercase tracking-[0.25em] text-neutral-400 z-10 font-mono">
         <div className="flex gap-3 sm:gap-6 font-medium">
-          <span>Local IP: 192.168.1.104</span>
+          <span>Local IP: {localIp}</span>
           <span className="text-neutral-805 hidden sm:inline">|</span>
           <span className="hidden sm:inline">Gateway: Connected</span>
         </div>
@@ -581,6 +623,64 @@ export default function App() {
                       <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.techPingDelaySim ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
                   </label>
+
+                  {/* Work Hours Progress Tracker Toggle */}
+                  <label className="flex items-center justify-between text-xs text-neutral-350 hover:text-white cursor-pointer py-1.5">
+                    <span>Work Hours Tracker overlay</span>
+                    <input
+                      type="checkbox"
+                      checked={!!settings.showWorkProgress}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        if (isChecked) {
+                          const start = prompt('Enter shift start time (24h format, e.g., 09:00):', settings.workStart || '09:00');
+                          if (start === null) return;
+                          const end = prompt('Enter shift end time (24h format, e.g., 17:00):', settings.workEnd || '17:00');
+                          if (end === null) return;
+                          
+                          setSettings((prev) => ({
+                            ...prev,
+                            showWorkProgress: true,
+                            workStart: start,
+                            workEnd: end
+                          }));
+                          addLog('SYS', 'success', `Work tracker activated: ${start} to ${end}`);
+                        } else {
+                          updateSettingField('showWorkProgress', false);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <div 
+                      className="w-8 h-4 rounded-full p-0.5 transition-all"
+                      style={{ backgroundColor: settings.showWorkProgress ? currentTheme.accent : '#262626' }}
+                    >
+                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showWorkProgress ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                  </label>
+
+                  {settings.showWorkProgress && (
+                    <div className="pl-4 pb-2 flex gap-4 text-xs font-mono select-none" id="work-hours-adjust-inputs">
+                      <div className="flex flex-col">
+                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">Shift Start</span>
+                        <input
+                          type="text"
+                          value={settings.workStart || '09:00'}
+                          onChange={(e) => updateSettingField('workStart', e.target.value)}
+                          className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">Shift End</span>
+                        <input
+                          type="text"
+                          value={settings.workEnd || '17:00'}
+                          onChange={(e) => updateSettingField('workEnd', e.target.value)}
+                          className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 5. System Configuration Backup (JSON) */}
@@ -594,8 +694,8 @@ export default function App() {
                   </p>
                   
                   <textarea
-                    readOnly
-                    value={JSON.stringify({ settings, pinnedSites })}
+                    ref={telemetryRef}
+                    defaultValue={JSON.stringify({ settings, pinnedSites })}
                     onClick={(e) => {
                       (e.target as HTMLTextAreaElement).select();
                     }}
@@ -608,8 +708,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify({ settings, pinnedSites }));
-                        addLog('SYS', 'success', 'Telemetry configuration backup string copied to clipboard');
+                        if (telemetryRef.current) {
+                          navigator.clipboard.writeText(telemetryRef.current.value);
+                          addLog('SYS', 'success', 'Telemetry configuration backup string copied to clipboard');
+                        }
                       }}
                       className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
                     >
@@ -618,10 +720,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        const inputPrompt = prompt('Paste your backup telemetry string:');
-                        if (inputPrompt) {
+                        const inputVal = telemetryRef.current?.value;
+                        if (inputVal) {
                           try {
-                            const parsed = JSON.parse(inputPrompt);
+                            const parsed = JSON.parse(inputVal);
                             if (parsed && typeof parsed === 'object') {
                               if (parsed.settings) {
                                 setSettings((prev) => ({ ...prev, ...parsed.settings }));
@@ -630,6 +732,7 @@ export default function App() {
                                 setPinnedSites(parsed.pinnedSites);
                               }
                               addLog('SYS', 'success', 'System backup telemetry successfully restored');
+                              alert('System backup telemetry successfully restored!');
                             } else {
                               alert('Telemetry restore failed: Invalid configuration layout.');
                             }

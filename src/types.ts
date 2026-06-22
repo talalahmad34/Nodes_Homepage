@@ -42,6 +42,9 @@ export interface UserSettings {
   activeBackground: 'network' | 'starfield' | 'grid';
   showAnalogOverlay: boolean;
   techPingDelaySim: boolean;
+  showWorkProgress?: boolean;
+  workStart?: string;
+  workEnd?: string;
 }
 
 export interface SystemLog {

@@ -89,9 +89,43 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
       weekday: 'long',
       year: 'numeric',
       month: 'short',
-      day: '2-digit',
     };
     return time.toLocaleDateString('en-US', options).toUpperCase();
+  };
+
+  const getShiftProgressText = () => {
+    if (!settings.showWorkProgress || !settings.workStart || !settings.workEnd) {
+      return null;
+    }
+
+    try {
+      const parseTimeToMinutes = (timeStr: string) => {
+        const parts = timeStr.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        return h * 60 + m;
+      };
+
+      const startMin = parseTimeToMinutes(settings.workStart);
+      const endMin = parseTimeToMinutes(settings.workEnd);
+      const currentMin = time.getHours() * 60 + time.getMinutes();
+
+      if (currentMin < startMin) {
+        return `0% (Starts at ${settings.workStart})`;
+      }
+      if (currentMin >= endMin) {
+        return `100% (Shift Ended)`;
+      }
+
+      const totalShift = endMin - startMin;
+      if (totalShift <= 0) return '0%';
+
+      const elapsed = currentMin - startMin;
+      const pct = (elapsed / totalShift) * 100;
+      return `${(Math.round(pct * 10) / 10).toFixed(1)}% Active`;
+    } catch (e) {
+      return null;
+    }
   };
 
   // Theme color styling mappings
@@ -122,14 +156,14 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   const themeCornerBorder = getThemeBorderColor();
 
   return (
-    <div className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-2 px-4" id="root-futuristic-clock-container">
+    <div className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-0 px-4" id="root-futuristic-clock-container">
       {/* Decorative Outer Tech Frames from Elegant Dark guidelines */}
       <div className="absolute -inset-2 border border-neutral-800/20 rounded-xl pointer-events-none -z-10"></div>
       <div className={`absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 ${themeCornerBorder} pointer-events-none -z-10`}></div>
       <div className={`absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 ${themeCornerBorder} pointer-events-none -z-10`}></div>
 
       {/* Top micro coordinates strip */}
-      <div className="flex items-center space-x-5 text-xs font-mono text-neutral-400 tracking-wider mb-2.5 z-10" id="micro-coord-strip">
+      <div className="flex items-center space-x-5 text-xs font-mono text-neutral-400 tracking-wider mb-2 z-10" id="micro-coord-strip">
         <span className="flex items-center gap-1.5 font-semibold">
           <Globe className="w-3.5 h-3.5 text-neutral-500 animate-pulse" />
           UTC {(time.getTimezoneOffset() / 60) * -1 > 0 ? '+' : ''}{(time.getTimezoneOffset() / 60) * -1}H
@@ -148,14 +182,14 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
       {/* Actual Digital Clock Backdrop segment (88:88:88 tracing overlay) */}
       <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] select-none pointer-events-none z-0 overflow-hidden">
-        <div className="text-[170px] font-black tracking-tighter select-none font-mono">
+        <div className="text-[140px] font-black tracking-tighter select-none font-mono">
           88:88:88
         </div>
       </div>
 
       {/* Main Glass Clock Face */}
       <div 
-        className={`relative w-full py-7 px-10 rounded-2xl border ${colors.border} bg-neutral-900/60 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
+        className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border ${colors.border} bg-neutral-900/60 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
         id="clock-shield"
       >
         {/* Futuristic layout grids inside clock */}
@@ -169,17 +203,17 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
         <div className={`absolute inset-0 bg-gradient-to-b ${colors.bgGlow} to-transparent pointer-events-none opacity-30`} />
 
         {/* Date visual header */}
-        <div className="text-sm font-mono tracking-[0.3em] text-neutral-300 font-medium mb-2.5 z-10 flex flex-col items-center gap-1.5 animate-pulse">
+        <div className="text-xs sm:text-sm font-mono tracking-[0.3em] text-neutral-300 font-medium mb-2 z-10 flex flex-col items-center gap-1.5 animate-pulse">
           <div className="flex items-center gap-2">
             {formatFullDate()}
-            <span className="flex h-2.5 w-2.5 relative">
+            <span className="flex h-2 w-2 relative">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${colors.accentBg} opacity-75`}></span>
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${colors.accentBg}`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${colors.accentBg}`}></span>
             </span>
           </div>
 
           {/* Dash signal bar from Elegant Dark design */}
-          <div className="flex gap-1.5 items-center mt-1.5">
+          <div className="flex gap-1.5 items-center mt-1">
             <div className={`h-1 w-8 opacity-30 rounded-full ${colors.accentBg}`}></div>
             <div className={`h-1 w-20 opacity-60 rounded-full ${colors.accentBg}`}></div>
             <div className={`h-1 w-4 opacity-10 rounded-full ${colors.accentBg}`}></div>
@@ -187,53 +221,58 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
         </div>
 
         {/* The Digital Clock Face */}
-        <div className="flex items-baseline font-mono z-10 select-none pb-2 relative" id="clock-timestamp-readout">
-          <span className={`text-6xl sm:text-7xl md:text-8xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
+        <div className="flex items-baseline font-mono z-10 select-none pb-1 relative" id="clock-timestamp-readout">
+          <span className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
             {formattedHours}
           </span>
           
           <motion.span 
             animate={{ opacity: [1, 0, 1] }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-            className={`text-6xl sm:text-7xl md:text-8xl font-light text-neutral-400 mx-2 pb-1.5`}
+            className={`text-5xl sm:text-6xl md:text-7xl font-light text-neutral-400 mx-1.5 pb-1`}
           >
             :
           </motion.span>
           
-          <span className={`text-6xl sm:text-7xl md:text-8xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
+          <span className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
             {formattedMins}
           </span>
 
           {settings.showSeconds && (
             <>
-              <span className="text-4xl sm:text-5xl font-light text-neutral-500 mx-1.5">:</span>
-              <span className={`text-4xl sm:text-5xl font-normal text-neutral-300 font-mono w-[1.25em] inline-block`}>
+              <span className="text-3xl sm:text-4xl font-light text-neutral-500 mx-1">:</span>
+              <span className={`text-3xl sm:text-4xl font-normal text-neutral-300 font-mono w-[1.25em] inline-block`}>
                 {formattedSecs}
               </span>
             </>
           )}
 
           {!settings.timeFormat24h && (
-            <span className="text-xs sm:text-sm font-bold tracking-widest text-neutral-400 ml-4 uppercase border border-neutral-800 px-1.5 py-0.5 rounded bg-neutral-950/50">
+            <span className="text-[10px] sm:text-xs font-bold tracking-widest text-neutral-400 ml-3 uppercase border border-neutral-800 px-1 py-0.5 rounded bg-neutral-950/50">
               {period}
             </span>
           )}
         </div>
 
         {/* Binary Clock Matrix or Hex Clock Overlay based on configs */}
-        <div className="mt-4 w-full border-t border-neutral-800/60 pt-3.5 flex items-center justify-between z-10">
+        <div className="mt-2.5 w-full border-t border-neutral-800/60 pt-2 flex items-center justify-between z-10">
           
-          {/* Hex code representation */}
+          {/* Shift progress / status representation */}
           <div className="flex flex-col items-start font-mono text-[10px] tracking-wider text-neutral-400">
-            <span className="text-neutral-500 font-bold">TIME COLOR GRAPH</span>
-            {settings.showHexClock ? (
-              <span className={`${colors.text} font-bold font-mono text-sm mt-0.5 transition-colors duration-1000`}>
-                {generatedHex}
-              </span>
+            {settings.showWorkProgress ? (
+              <div className="flex flex-col items-start">
+                <span className="text-neutral-500 font-bold">SHIFT PROGRESS</span>
+                <span className={`${colors.text} font-bold font-mono text-xs sm:text-sm mt-0.5 animate-pulse`}>
+                  {getShiftProgressText()}
+                </span>
+              </div>
             ) : (
-              <span className="text-neutral-350 font-bold font-mono text-xs mt-0.5">
-                ESTABLISHED SECURE LINK
-              </span>
+              <div className="flex flex-col items-start">
+                <span className="text-neutral-500 font-bold">SYSTEM STATUS</span>
+                <span className="text-neutral-300 font-mono text-xs mt-0.5">
+                  ESTABLISHED SECURE LINK
+                </span>
+              </div>
             )}
           </div>
 

@@ -185,7 +185,7 @@ export default function PinnedSites({
   const colors = getThemeColors();
 
   return (
-    <div className="w-full max-w-7xl px-4 mt-4 flex flex-col items-center" id="pinned-node-grid-hub">
+    <div className="w-full max-w-none px-2 mt-2 flex flex-col items-center" id="pinned-node-grid-hub">
       
       {/* Category Tabs & Header */}
       <div className="w-full mb-4 z-10">
@@ -209,7 +209,7 @@ export default function PinnedSites({
       </div>
 
       {/* Grid displays */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full z-10">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 w-full z-10">
         {pinnedSites.map((site, index) => {
           // Generate customized ports for cyber diagnostics feel 
           const simPort = site.url.includes('https') ? 443 : 80;
@@ -245,7 +245,7 @@ export default function PinnedSites({
               />
 
               <div
-                className={`relative h-[120px] w-full p-4 flex flex-col justify-between rounded-xl border bg-neutral-950/40 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
+                className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-950/40 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
                   isDraggedIdx 
                     ? 'border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80' 
                     : isHoveredIdx

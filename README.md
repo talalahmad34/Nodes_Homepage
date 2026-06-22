@@ -28,7 +28,8 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) installed on your machi
 
 1. **Clone or navigate to the directory:**
    ```bash
-   cd "/home/talal/Documents/Dev/Nodes Homepage Extension"
+   git clone https://github.com/your-username/nodes-homepage-extension.git
+   cd nodes-homepage-extension
    ```
 
 2. **Install dependencies:**
@@ -49,7 +50,7 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) installed on your machi
 2. Enable **Developer mode** using the toggle switch in the top-right corner.
 3. Click the **Load unpacked** button in the top-left corner.
 4. Select the **`dist`** directory inside this project folder:
-   `/home/talal/Documents/Dev/Nodes Homepage Extension/dist`
+   `nodes-homepage-extension/dist`
 5. Open a new tab (`Ctrl + T`) to launch your new dashboard!
 
 ---
