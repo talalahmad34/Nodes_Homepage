@@ -356,7 +356,7 @@ export default function App() {
       </header>
 
       {/* Main Body Centered Column */}
-      <main className="w-full max-w-none px-6 sm:px-10 flex flex-col items-center justify-start pt-1 sm:pt-2 md:pt-3 space-y-2 md:space-y-3 lg:space-y-3.5 flex-grow z-10 py-1 sm:py-1.5">
+      <main className="w-full max-w-none px-6 sm:px-10 flex flex-col items-center justify-start pt-3 sm:pt-5 md:pt-6 space-y-2 md:space-y-3 lg:space-y-3.5 flex-grow z-10 py-1 sm:py-1.5">
 
         {/* 1. Futuristic Digital Clock Widget */}
         <FuturisticClock

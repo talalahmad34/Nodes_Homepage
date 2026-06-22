@@ -11,6 +11,7 @@ export interface PinnedSite {
   iconValue: string; // Initials or Lucide icon name or image URL
   category?: string;
   visitCount: number;
+  position?: number;
 }
 
 export interface SearchEngine {

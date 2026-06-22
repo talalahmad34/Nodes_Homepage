@@ -32,6 +32,48 @@ export default function PinnedSites({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<PinnedSite | null>(null);
 
+  const [isManualGrid, setIsManualGrid] = useState(() => {
+    try {
+      return localStorage.getItem('netgrid_manual_grid') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('netgrid_manual_grid', String(isManualGrid));
+  }, [isManualGrid]);
+
+  // Ensure every site has a unique position
+  const sitesWithPositions = React.useMemo(() => {
+    let updated = false;
+    const resolved = pinnedSites.map(s => ({ ...s }));
+    
+    resolved.forEach((site) => {
+      if (site.position === undefined) {
+        let emptyPos = 0;
+        while (resolved.some(s => s.position === emptyPos)) {
+          emptyPos++;
+        }
+        site.position = emptyPos;
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      setTimeout(() => onReorderSites(resolved), 0);
+    }
+    
+    return resolved.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }, [pinnedSites, onReorderSites]);
+
+  // Calculate grid dimensions (full rows of 8, minimum 16)
+  const totalSlotsCount = React.useMemo(() => {
+    const maxPos = sitesWithPositions.reduce((max, s) => Math.max(max, s.position ?? 0), 0);
+    const count = Math.max(16, maxPos + 1);
+    return Math.ceil(count / 8) * 8;
+  }, [sitesWithPositions]);
+
   // Drag and drop ordering states
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [hoveredDragIdx, setHoveredDragIdx] = useState<number | null>(null);
@@ -44,28 +86,41 @@ export default function PinnedSites({
   const [iconValue, setIconValue] = useState('');
   const [category, setCategory] = useState('');
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIdx(index);
+  const handleDragStart = (e: React.DragEvent, positionIndex: number) => {
+    setDraggedIdx(positionIndex);
     e.dataTransfer.effectAllowed = 'move';
-    addLog('SYS', 'info', `Initiated rearrange calibration on segment node [${pinnedSites[index].title}]`);
+    const site = sitesWithPositions.find(s => s.position === positionIndex);
+    if (site) {
+      addLog('SYS', 'info', `Initiated rearrange calibration on node [${site.title}]`);
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent, positionIndex: number) => {
     e.preventDefault();
-    if (draggedIdx === null || draggedIdx === index) return;
-    setHoveredDragIdx(index);
+    if (draggedIdx === null || draggedIdx === positionIndex) return;
+    setHoveredDragIdx(positionIndex);
   };
 
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetPosition: number) => {
     e.preventDefault();
-    if (draggedIdx === null || draggedIdx === targetIndex) return;
+    if (draggedIdx === null || draggedIdx === targetPosition) return;
 
-    const reordered = [...pinnedSites];
-    const [removed] = reordered.splice(draggedIdx, 1);
-    reordered.splice(targetIndex, 0, removed);
+    const sourceSite = sitesWithPositions.find(s => s.position === draggedIdx);
+    const targetSite = sitesWithPositions.find(s => s.position === targetPosition);
 
-    onReorderSites(reordered);
-    addLog('SYS', 'success', `Configuration path routed: Moved '${removed.title}' sequence index to ${targetIndex + 1}`);
+    if (sourceSite) {
+      const updated = sitesWithPositions.map(s => {
+        if (s.id === sourceSite.id) {
+          return { ...s, position: targetPosition };
+        }
+        if (targetSite && s.id === targetSite.id) {
+          return { ...s, position: draggedIdx };
+        }
+        return s;
+      });
+      onReorderSites(updated);
+      addLog('SYS', 'success', `Configuration path routed: Moved '${sourceSite.title}' to slot ${targetPosition + 1}`);
+    }
 
     setDraggedIdx(null);
     setHoveredDragIdx(null);
@@ -166,6 +221,12 @@ export default function PinnedSites({
     }, 150);
   };
 
+  const handleCardMiddleClick = (id: string, url: string) => {
+    onUpdateSiteVisits(id);
+    addLog('NET', 'packet', `Socket stream forwarding: routing client interface (new tab) -> ${url}`);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   // Group sites by category if desired, or render flat grid
   const categories = Array.from(
     new Set(pinnedSites.map((s) => s.category || 'General'))
@@ -197,6 +258,20 @@ export default function PinnedSites({
           </div>
           <div className="h-px flex-grow bg-neutral-800/40 font-mono"></div>
           
+          {/* Manual Grid Toggle Button */}
+          <button
+            onClick={() => setIsManualGrid(!isManualGrid)}
+            className={`flex items-center gap-1.5 border font-mono text-[10px] uppercase py-1 px-3 rounded transition-all duration-300 cursor-pointer ${
+              isManualGrid 
+                ? 'bg-neutral-900 text-white shadow-md'
+                : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-300 hover:border-neutral-700'
+            }`}
+            style={isManualGrid ? { borderColor: colors.text.includes('emerald') ? '#34d399' : colors.text.includes('cyan') ? '#22d3ee' : colors.text.includes('amber') ? '#fbbf24' : colors.text.includes('purple') ? '#c084fc' : '#fb7185' } : undefined}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            {isManualGrid ? 'Grid Mode: ON' : 'Manual Grid'}
+          </button>
+
           <button
             onClick={openAddModal}
             className="flex items-center gap-1.5 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-mono text-[10px] uppercase py-1 px-3 rounded transition-all duration-300 cursor-pointer"
@@ -210,24 +285,56 @@ export default function PinnedSites({
 
       {/* Grid displays */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 w-full z-10">
-        {pinnedSites.map((site, index) => {
-          // Generate customized ports for cyber diagnostics feel 
+        {(isManualGrid ? Array.from({ length: totalSlotsCount }, (_, i) => i) : sitesWithPositions.map(s => s.position ?? 0)).map((posIndex, index) => {
+          const site = sitesWithPositions.find(s => s.position === posIndex);
+
+          if (!site) {
+            const isHoveredSlot = hoveredDragIdx === posIndex;
+            const isDraggingActive = draggedIdx !== null;
+            return (
+              <div
+                key={`empty-slot-${posIndex}`}
+                onDragOver={(e) => handleDragOver(e, posIndex)}
+                onDrop={(e) => handleDrop(e, posIndex)}
+                onDragLeave={() => setHoveredDragIdx(null)}
+                className={`relative h-[110px] w-full p-3 rounded-xl border border-dashed backdrop-blur-sm transition-all duration-300 flex flex-col items-center justify-center font-mono select-none ${
+                  isDraggingActive
+                    ? isHoveredSlot
+                      ? 'border-neutral-400 bg-neutral-900/30 scale-102'
+                      : 'border-neutral-800 bg-neutral-950/10'
+                    : 'border-transparent bg-transparent'
+                }`}
+              >
+                {isDraggingActive && (
+                  <>
+                    <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
+                      Slot {String(posIndex + 1).padStart(2, '0')}
+                    </span>
+                    <span className="text-[8.5px] text-neutral-600 mt-1 uppercase tracking-widest">
+                      Empty Node
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          }
+
           const simPort = site.url.includes('https') ? 443 : 80;
-          const simIndex = index + 1;
-          const isDraggedIdx = draggedIdx === index;
-          const isHoveredIdx = hoveredDragIdx === index;
+          const simIndex = posIndex + 1;
+          const isDraggedIdx = draggedIdx === posIndex;
+          const isHoveredIdx = hoveredDragIdx === posIndex;
 
           return (
             <motion.div
               key={site.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: isDraggedIdx ? 0.35 : 1, y: 0 }}
-              transition={{ delay: index * 0.04 }}
+              transition={{ delay: index * 0.02 }}
               className="group relative bookmark-tile-node"
               draggable={activeDragId === site.id}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
+              onDragStart={(e) => handleDragStart(e, posIndex)}
+              onDragOver={(e) => handleDragOver(e, posIndex)}
+              onDrop={(e) => handleDrop(e, posIndex)}
               onDragEnd={() => {
                 handleDragEnd();
                 setActiveDragId(null);
@@ -253,6 +360,12 @@ export default function PinnedSites({
                       : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/10`
                 }`}
                 onClick={() => handleCardClick(site.id, site.url)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    handleCardMiddleClick(site.id, site.url);
+                  }
+                }}
               >
                 {/* Tech scanline visual lines within individual bookmark */}
                 <div className="absolute right-0 top-0 h-full w-[2px] bg-gradient-to-b from-transparent via-neutral-800/10 to-transparent" />

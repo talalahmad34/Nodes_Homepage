@@ -156,7 +156,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   const themeCornerBorder = getThemeBorderColor();
 
   return (
-    <div className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-0 px-4" id="root-futuristic-clock-container">
+    <div className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-2 px-4" id="root-futuristic-clock-container">
       {/* Decorative Outer Tech Frames from Elegant Dark guidelines */}
       <div className="absolute -inset-2 border border-neutral-800/20 rounded-xl pointer-events-none -z-10"></div>
       <div className={`absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 ${themeCornerBorder} pointer-events-none -z-10`}></div>
