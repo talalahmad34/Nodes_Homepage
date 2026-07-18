@@ -101,6 +101,11 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
     }
   }, [settings.searchEngineId]);
 
+  // Autofocus the search bar on load, as expected of a new-tab page
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   // Parse quick command shortcuts in search box
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
