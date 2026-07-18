@@ -5,8 +5,36 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Edit2, Trash2, ArrowUpRight, HelpCircle, LayoutGrid, Globe, Globe2, ShieldCheck, Cpu, GripVertical } from 'lucide-react';
+import { Plus, X, Edit2, Trash2, HelpCircle, LayoutGrid, Globe, Globe2, GripVertical } from 'lucide-react';
 import { PinnedSite, UserSettings } from '../types';
+
+// Free, no-key-required favicon lookup service — used for the "Site Favicon" icon option.
+const getFaviconUrl = (rawUrl: string): string => {
+  try {
+    const parsed = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
+    return `https://www.google.com/s2/favicons?sz=64&domain=${parsed.hostname}`;
+  } catch {
+    return '';
+  }
+};
+
+// Renders a fetched favicon, falling back to text initials if the image fails to load.
+function SiteFavicon({ site }: { site: PinnedSite }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed || !site.iconValue) {
+    return <span className="text-xs">{site.title.substring(0, 2).toUpperCase()}</span>;
+  }
+
+  return (
+    <img
+      src={site.iconValue}
+      alt=""
+      className="w-6 h-6 object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 interface PinnedSitesProps {
   settings: UserSettings;
@@ -31,6 +59,20 @@ export default function PinnedSites({
 }: PinnedSitesProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<PinnedSite | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const confirmDeleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const requestDelete = (site: PinnedSite) => {
+    if (confirmDeleteId === site.id) {
+      if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
+      setConfirmDeleteId(null);
+      onDeleteSite(site.id);
+      return;
+    }
+    setConfirmDeleteId(site.id);
+    if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
+    confirmDeleteTimerRef.current = setTimeout(() => setConfirmDeleteId(null), 3000);
+  };
 
   const [isManualGrid, setIsManualGrid] = useState(() => {
     try {
@@ -185,7 +227,10 @@ export default function PinnedSites({
       formattedUrl = `https://${formattedUrl}`;
     }
 
-    const valueOfIcon = iconValue.trim() || title.substring(0, 2).toUpperCase();
+    const valueOfIcon =
+      iconType === 'custom'
+        ? getFaviconUrl(formattedUrl) || iconValue.trim()
+        : iconValue.trim() || title.substring(0, 2).toUpperCase();
 
     if (editingSite) {
       onEditSite({
@@ -386,6 +431,7 @@ export default function PinnedSites({
                         e.stopPropagation();
                         openEditModal(site);
                       }}
+                      aria-label={`Edit ${site.title}`}
                       className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-all cursor-pointer"
                     >
                       <Edit2 className="w-3 h-3" />
@@ -393,9 +439,15 @@ export default function PinnedSites({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDeleteSite(site.id);
+                        requestDelete(site);
                       }}
-                      className="p-1 rounded hover:bg-rose-950 text-neutral-400 hover:text-rose-400 transition-all cursor-pointer"
+                      aria-label={confirmDeleteId === site.id ? `Confirm delete ${site.title}` : `Delete ${site.title}`}
+                      title={confirmDeleteId === site.id ? 'Click again to confirm' : undefined}
+                      className={`p-1 rounded transition-all cursor-pointer ${
+                        confirmDeleteId === site.id
+                          ? 'bg-rose-950 text-rose-400 animate-pulse'
+                          : 'hover:bg-rose-950 text-neutral-400 hover:text-rose-400'
+                      }`}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -404,16 +456,14 @@ export default function PinnedSites({
 
                 {/* Micro logo representation */}
                 <div className="flex items-center space-x-3">
-                  <div 
-                    className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-lg border border-neutral-800/60 bg-neutral-900/50 text-sm font-semibold font-mono tracking-wider text-neutral-300 group-hover:text-white group-hover:border-neutral-700 select-none group-shadow transition-all ${colors.iconGlow}`}
+                  <div
+                    className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-lg border border-neutral-800/60 bg-neutral-900/50 text-sm font-semibold font-mono tracking-wider text-neutral-300 group-hover:text-white group-hover:border-neutral-700 select-none group-shadow transition-all overflow-hidden ${colors.iconGlow}`}
                   >
                     {site.iconType === 'initials' && site.iconValue}
                     {site.iconType === 'icon' && (
                       <Globe className="w-4.5 h-4.5 text-neutral-400 group-hover:text-white" />
                     )}
-                    {site.iconType === 'custom' && (
-                      <span className="text-xs">{site.iconValue.substring(0, 2)}</span>
-                    )}
+                    {site.iconType === 'custom' && <SiteFavicon site={site} />}
                   </div>
 
                   {/* Bookmark descriptive metadata */}
@@ -499,6 +549,7 @@ export default function PinnedSites({
                 <button
                   type="button"
                   onClick={closeModal}
+                  aria-label="Close node registration form"
                   className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white transition-all cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -538,7 +589,7 @@ export default function PinnedSites({
                 </div>
 
                 {/* Icon option field */}
-                <div className="grid grid-cols-2 gap-2 pb-1.5">
+                <div className="grid grid-cols-3 gap-2 pb-1.5">
                   <button
                     type="button"
                     onClick={() => { setIconType('initials'); }}
@@ -548,7 +599,18 @@ export default function PinnedSites({
                         : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
                     }`}
                   >
-                    Custom Initials
+                    Initials
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIconType('custom'); setIconValue(getFaviconUrl(url)); }}
+                    className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
+                      iconType === 'custom'
+                        ? `${colors.border} bg-neutral-900 text-white`
+                        : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
+                    }`}
+                  >
+                    Site Favicon
                   </button>
                   <button
                     type="button"
@@ -562,6 +624,19 @@ export default function PinnedSites({
                     Globe Icon
                   </button>
                 </div>
+
+                {iconType === 'custom' && (
+                  <div className="flex items-center gap-2 text-[10px] text-neutral-500 -mt-1 pb-1.5">
+                    <div className="w-6 h-6 rounded border border-neutral-800 bg-neutral-900 flex items-center justify-center overflow-hidden shrink-0">
+                      {url ? (
+                        <img src={getFaviconUrl(url)} alt="" className="w-4 h-4 object-contain" />
+                      ) : (
+                        <Globe2 className="w-3 h-3 text-neutral-600" />
+                      )}
+                    </div>
+                    <span>Auto-detected from the source link above.</span>
+                  </div>
+                )}
 
                 {/* Dynamic Icon character value input depending on type selection */}
                 {iconType === 'initials' && (

@@ -6,6 +6,12 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    // The app reads process.env.APP_URL (an AI Studio runtime var). The production
+    // build stubs `process` automatically; `vite dev` doesn't unless told to, which
+    // otherwise crashes the whole app with "process is not defined".
+    define: {
+      'process.env': {},
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
