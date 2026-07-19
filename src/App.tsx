@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, Cpu, X, Globe, User, Palette, Eye, Terminal, FolderSync } from 'lucide-react';
 import { PinnedSite, UserSettings, SystemLog, SystemTheme } from './types';
@@ -100,6 +100,50 @@ const DEFAULT_SITES: PinnedSite[] = [
   },
 ];
 
+// Structural validation for a single pinned site parsed from an untrusted backup file/paste —
+// guards against e.g. an array of plain strings passing the earlier `Array.isArray` check alone.
+function isValidPinnedSite(value: unknown): value is PinnedSite {
+  if (!value || typeof value !== 'object') return false;
+  const site = value as Record<string, unknown>;
+  return (
+    typeof site.id === 'string' &&
+    typeof site.title === 'string' &&
+    typeof site.url === 'string' &&
+    (site.iconType === 'initials' || site.iconType === 'icon' || site.iconType === 'custom') &&
+    typeof site.iconValue === 'string' &&
+    typeof site.visitCount === 'number'
+  );
+}
+
+interface BackupPayload {
+  settings?: Partial<UserSettings>;
+  pinnedSites?: PinnedSite[];
+}
+
+// Parses and structurally validates a backup JSON string; returns null if the shape can't be trusted.
+function parseBackupPayload(raw: string): BackupPayload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const data = parsed as Record<string, unknown>;
+  const result: BackupPayload = {};
+
+  if (data.settings && typeof data.settings === 'object') {
+    result.settings = data.settings as Partial<UserSettings>;
+  }
+  if (Array.isArray(data.pinnedSites)) {
+    if (!data.pinnedSites.every(isValidPinnedSite)) return null;
+    result.pinnedSites = data.pinnedSites as PinnedSite[];
+  }
+
+  return result.settings || result.pinnedSites ? result : null;
+}
+
 const DEFAULT_SETTINGS: UserSettings = {
   userName: 'Operator',
   themeId: 'cyan',
@@ -117,6 +161,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 export default function App() {
   const telemetryRef = useRef<HTMLTextAreaElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useState<UserSettings>(() => {
     const parsed = readLocal<UserSettings>('netgrid_settings', DEFAULT_SETTINGS);
     // Force duckduckgo if the stored default is old 'google' or missing
@@ -134,9 +179,10 @@ export default function App() {
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [isLogPanelOpen, setIsLogPanelOpen] = useState(false);
-  const [telemetryStatus, setTelemetryStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [telemetryStatus, setTelemetryStatus] = useState<{ ok: boolean; message: string } | null>(
+    null,
+  );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [appUrl, setAppUrl] = useState('');
   const [localIp, setLocalIp] = useState<string | null>(null);
 
   // Pull the latest chrome.storage.sync copy (if any) shortly after the instant
@@ -174,13 +220,6 @@ export default function App() {
     }
   }, [settings, pinnedSites, isSettingsOpen]);
 
-  // Read environment variable injects at startup (AI Studio runtime variables)
-  useEffect(() => {
-    // Read window origin as backup, or direct process env variables if present
-    const envUrl = process.env.APP_URL || '';
-    setAppUrl(envUrl);
-  }, []);
-
   // Get actual local IP address on startup and listen for network changes
   useEffect(() => {
     const updateIp = () => {
@@ -188,23 +227,26 @@ export default function App() {
         if (typeof chrome !== 'undefined' && chrome.system && chrome.system.network) {
           chrome.system.network.getNetworkInterfaces((interfaces) => {
             const ipv4Interface = interfaces.find(
-              (iface) =>
-                iface.address.includes('.') && 
-                !iface.address.startsWith('127.0')
+              (iface) => iface.address.includes('.') && !iface.address.startsWith('127.0'),
             );
             if (ipv4Interface) {
               setLocalIp(ipv4Interface.address);
             }
           });
         }
-      } catch (e) {
+      } catch {
         // Fail silent
       }
     };
 
     updateIp();
 
-    if (typeof chrome !== 'undefined' && chrome.system && chrome.system.network && chrome.system.network.onNetworkLinkChanged) {
+    if (
+      typeof chrome !== 'undefined' &&
+      chrome.system &&
+      chrome.system.network &&
+      chrome.system.network.onNetworkLinkChanged
+    ) {
       chrome.system.network.onNetworkLinkChanged.addListener(updateIp);
       return () => {
         chrome.system.network.onNetworkLinkChanged.removeListener(updateIp);
@@ -213,25 +255,28 @@ export default function App() {
   }, []);
 
   // System actions telemetry log callback function, stabilized safely to prevent triggers
-  const addLog = useCallback((
-    module: 'SYS' | 'NET' | 'IO' | 'EXT',
-    type: 'info' | 'success' | 'warning' | 'packet',
-    message: string
-  ) => {
-    const formattedDate = new Date();
-    const ts = formattedDate.toLocaleTimeString('en-US', { hour12: false });
-    
-    setLogs((prev) => [
-      {
-        id: Math.random().toString(36).substring(2, 9),
-        timestamp: ts,
-        module,
-        type,
-        message,
-      },
-      ...prev.slice(0, 49), // Max 50 rows of history cache
-    ]);
-  }, []);
+  const addLog = useCallback(
+    (
+      module: 'SYS' | 'NET' | 'IO' | 'EXT',
+      type: 'info' | 'success' | 'warning' | 'packet',
+      message: string,
+    ) => {
+      const formattedDate = new Date();
+      const ts = formattedDate.toLocaleTimeString('en-US', { hour12: false });
+
+      setLogs((prev) => [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: ts,
+          module,
+          type,
+          message,
+        },
+        ...prev.slice(0, 49), // Max 50 rows of history cache
+      ]);
+    },
+    [],
+  );
 
   // Generate welcome log only once at initial boot up
   useEffect(() => {
@@ -268,8 +313,50 @@ export default function App() {
 
   const handleIncrementVisit = (id: string) => {
     setPinnedSites((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, visitCount: s.visitCount + 1 } : s))
+      prev.map((s) => (s.id === id ? { ...s, visitCount: s.visitCount + 1 } : s)),
     );
+  };
+
+  // Shared entry point for both the paste-to-restore textarea and the file-upload import —
+  // parses + structurally validates before ever touching state.
+  const applyBackupPayload = (raw: string) => {
+    const payload = parseBackupPayload(raw);
+    if (!payload) {
+      addLog('SYS', 'warning', 'Restoration sequence failed: Invalid segment format');
+      setTelemetryStatus({ ok: false, message: 'Please provide a valid backup JSON format.' });
+      setTimeout(() => setTelemetryStatus(null), 4000);
+      return;
+    }
+
+    if (payload.settings) {
+      setSettings((prev) => ({ ...prev, ...payload.settings }));
+    }
+    if (payload.pinnedSites) {
+      setPinnedSites(payload.pinnedSites);
+    }
+    addLog('SYS', 'success', 'System backup telemetry successfully restored');
+    setTelemetryStatus({ ok: true, message: 'Backup restored successfully.' });
+    setTimeout(() => setTelemetryStatus(null), 4000);
+  };
+
+  const handleDownloadBackup = () => {
+    const payload = JSON.stringify({ settings, pinnedSites }, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `nodes-homepage-backup-${dateStamp}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    addLog('SYS', 'success', 'Telemetry configuration backup downloaded as file');
+  };
+
+  const handleImportBackupFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    file.text().then(applyBackupPayload);
   };
 
   // Human greeting calculator dependent on hours
@@ -290,43 +377,54 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center justify-between text-[#A0A0A5] overflow-x-hidden font-sans pb-3 sm:pb-5 select-none bg-transparent">
-      
       {/* Absolute solid background behind everything to keep -z-20 canvas visible */}
       <div className="absolute inset-0 bg-[#050506] -z-30 pointer-events-none" />
 
       {/* Background Interactive Canvas Overlay */}
-      <NetworkBackground
-        type={settings.activeBackground}
-        colorTheme={currentTheme.primary}
-      />
+      <NetworkBackground type={settings.activeBackground} colorTheme={currentTheme.primary} />
 
       {/* Technical Grid Overlay from Elegant Dark */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.035] -z-10" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.035] -z-10"
+        style={{
+          backgroundImage:
+            'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      ></div>
 
       {/* Background Ambient radial spotlight matches user theme */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none -z-10 transition-all duration-1000"
         style={{
-          background: `radial-gradient(circle at 50% 45%, ${currentTheme.id === 'cyan' ? 'rgba(6, 182, 212, 0.08)' : currentTheme.bgClass}, transparent 75%)`
+          background: `radial-gradient(circle at 50% 45%, ${currentTheme.id === 'cyan' ? 'rgba(6, 182, 212, 0.08)' : currentTheme.bgClass}, transparent 75%)`,
         }}
       />
 
       {/* Floating System Header navigation styled to match Elegant Dark */}
-      <header className="w-full max-w-none px-6 sm:px-10 pt-3 sm:pt-4 pb-2 flex justify-between items-center z-10 select-none border-b border-neutral-900/50" id="primary-app-header">
+      <header
+        className="w-full max-w-none px-6 sm:px-10 pt-3 sm:pt-4 pb-2 flex justify-between items-center z-10 select-none border-b border-neutral-900/50"
+        id="primary-app-header"
+      >
         <div className="space-y-1 font-mono w-1/3">
           <div className="flex items-center gap-2">
-            <div 
-              className="w-2.5 h-2.5 rounded-full animate-pulse" 
-              style={{ 
+            <div
+              className="w-2.5 h-2.5 rounded-full animate-pulse"
+              style={{
                 backgroundColor: currentTheme.accent,
-                boxShadow: `0 0 10px ${currentTheme.accent}`
+                boxShadow: `0 0 10px ${currentTheme.accent}`,
               }}
             ></div>
-            <span className="text-xs uppercase tracking-[0.2em] font-bold" style={{ color: currentTheme.accent }}>
+            <span
+              className="text-xs uppercase tracking-[0.2em] font-bold"
+              style={{ color: currentTheme.accent }}
+            >
               System Online
             </span>
           </div>
-          <h2 className="text-xs tracking-widest text-neutral-400 uppercase">CORE_NODE // NETGRID-HK92</h2>
+          <h2 className="text-xs tracking-widest text-neutral-400 uppercase">
+            CORE_NODE // NETGRID-HK92
+          </h2>
         </div>
 
         {/* Center greetings tag inline with header info */}
@@ -345,10 +443,14 @@ export default function App() {
         {/* Action controls button links & Network display from design */}
         <div className="flex items-center justify-end gap-6 w-1/3">
           <div className="text-right space-y-1 font-mono hidden sm:block font-medium">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Network Latency</div>
-            <div className="text-sm text-neutral-300">14.2ms <span className="text-neutral-600">/</span> 1.2gbps</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              Network Latency
+            </div>
+            <div className="text-sm text-neutral-300">
+              14.2ms <span className="text-neutral-600">/</span> 1.2gbps
+            </div>
           </div>
-          
+
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="p-1.5 px-3 select-none text-neutral-300 rounded-lg border border-neutral-800 bg-neutral-950/80 hover:text-white hover:border-neutral-700 transition-all cursor-pointer flex items-center gap-1.5 font-mono"
@@ -362,19 +464,11 @@ export default function App() {
 
       {/* Main Body Centered Column */}
       <main className="w-full max-w-none px-6 sm:px-10 flex flex-col items-center justify-start pt-3 sm:pt-5 md:pt-6 space-y-2 md:space-y-3 lg:space-y-3.5 flex-grow z-10 py-1 sm:py-1.5">
-
         {/* 1. Futuristic Digital Clock Widget */}
-        <FuturisticClock
-          settings={settings}
-          addLog={addLog}
-        />
+        <FuturisticClock settings={settings} addLog={addLog} />
 
         {/* 2. Interactive Search terminal bar */}
-        <SearchConsole
-          settings={settings}
-          updateSettings={updateSettingField}
-          addLog={addLog}
-        />
+        <SearchConsole settings={settings} updateSettings={updateSettingField} addLog={addLog} />
 
         {/* 3. Pinned custom shortcut grid items */}
         <PinnedSites
@@ -395,6 +489,10 @@ export default function App() {
           <span>Local IP: {localIp ?? 'Unavailable'}</span>
           <span className="text-neutral-805 hidden sm:inline">|</span>
           <span className="hidden sm:inline">Gateway: Connected</span>
+          <span className="text-neutral-805 hidden sm:inline">|</span>
+          <span className="hidden sm:inline" title="NETGRID build version">
+            v{__APP_VERSION__}
+          </span>
         </div>
         <div className="flex gap-3 items-center font-medium">
           <button
@@ -408,12 +506,23 @@ export default function App() {
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            <span className="text-[10px] uppercase tracking-wider hidden sm:inline">System Log</span>
+            <span className="text-[10px] uppercase tracking-wider hidden sm:inline">
+              System Log
+            </span>
           </button>
           <div className="flex gap-1.5 items-center">
-            <div className="w-1.5 h-3 rounded-xs" style={{ backgroundColor: currentTheme.accent }} />
-            <div className="w-1.5 h-3 rounded-xs" style={{ backgroundColor: currentTheme.accent }} />
-            <div className="w-1.5 h-3 rounded-xs" style={{ backgroundColor: currentTheme.accent }} />
+            <div
+              className="w-1.5 h-3 rounded-xs"
+              style={{ backgroundColor: currentTheme.accent }}
+            />
+            <div
+              className="w-1.5 h-3 rounded-xs"
+              style={{ backgroundColor: currentTheme.accent }}
+            />
+            <div
+              className="w-1.5 h-3 rounded-xs"
+              style={{ backgroundColor: currentTheme.accent }}
+            />
             <div className="w-1.5 h-3 rounded-xs bg-neutral-800" />
             <div className="w-1.5 h-3 rounded-xs bg-neutral-800" />
           </div>
@@ -445,7 +554,12 @@ export default function App() {
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="overflow-y-auto scrollbar-thin px-3 py-2 space-y-1 text-[10.5px]">
+            <div
+              className="overflow-y-auto scrollbar-thin px-3 py-2 space-y-1 text-[10.5px]"
+              role="log"
+              aria-live="polite"
+              aria-label="System telemetry log"
+            >
               {logs.length === 0 && (
                 <div className="text-neutral-600 py-4 text-center">No events recorded yet.</div>
               )}
@@ -457,10 +571,10 @@ export default function App() {
                       log.type === 'success'
                         ? 'text-emerald-400'
                         : log.type === 'warning'
-                        ? 'text-amber-400'
-                        : log.type === 'packet'
-                        ? 'text-cyan-400'
-                        : 'text-neutral-500'
+                          ? 'text-amber-400'
+                          : log.type === 'packet'
+                            ? 'text-cyan-400'
+                            : 'text-neutral-500'
                     }`}
                   >
                     [{log.module}]
@@ -478,7 +592,10 @@ export default function App() {
         {isSettingsOpen && (
           <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
             {/* Backdrop click closer */}
-            <div className="absolute inset-0 cursor-pointer" onClick={() => setIsSettingsOpen(false)} />
+            <div
+              className="absolute inset-0 cursor-pointer"
+              onClick={() => setIsSettingsOpen(false)}
+            />
 
             <motion.div
               initial={{ x: '100%' }}
@@ -492,7 +609,10 @@ export default function App() {
               <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-neutral-700" />
               <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-neutral-700" />
 
-              <div className="space-y-6 overflow-y-auto flex-grow max-h-[84vh] pr-2 scrollbar-none pb-4" id="calibration-drawer-scroller">
+              <div
+                className="space-y-6 overflow-y-auto flex-grow max-h-[84vh] pr-2 scrollbar-none pb-4"
+                id="calibration-drawer-scroller"
+              >
                 {/* Drawer header */}
                 <div className="flex justify-between items-center pb-3 border-b border-neutral-900 select-none">
                   <span className="text-[11px] font-bold text-neutral-300 tracking-[0.25em] uppercase flex items-center gap-1.5">
@@ -543,17 +663,19 @@ export default function App() {
                               : 'border-neutral-900 hover:border-neutral-800 text-neutral-500 hover:text-neutral-400'
                           }`}
                           style={{
-                            borderColor: isSelected ? theme.accent : undefined
+                            borderColor: isSelected ? theme.accent : undefined,
                           }}
                         >
                           <span className="flex items-center gap-2">
-                            <span 
-                              className="w-2.5 h-2.5 rounded-full" 
+                            <span
+                              className="w-2.5 h-2.5 rounded-full"
                               style={{ backgroundColor: theme.accent }}
                             />
                             {theme.name}
                           </span>
-                          {isSelected && <span className="text-[9px] opacity-65 font-bold">[ACTIVE]</span>}
+                          {isSelected && (
+                            <span className="text-[9px] opacity-65 font-bold">[ACTIVE]</span>
+                          )}
                         </button>
                       );
                     })}
@@ -611,7 +733,7 @@ export default function App() {
                               : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
                           }`}
                           style={{
-                            borderColor: isSelected ? currentTheme.accent : undefined
+                            borderColor: isSelected ? currentTheme.accent : undefined,
                           }}
                         >
                           {engine.name}
@@ -636,11 +758,15 @@ export default function App() {
                       onChange={(e) => updateSettingField('timeFormat24h', e.target.checked)}
                       className="sr-only"
                     />
-                    <div 
+                    <div
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{ backgroundColor: settings.timeFormat24h ? currentTheme.accent : '#262626' }}
+                      style={{
+                        backgroundColor: settings.timeFormat24h ? currentTheme.accent : '#262626',
+                      }}
                     >
-                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.timeFormat24h ? 'translate-x-4' : 'translate-x-0'}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.timeFormat24h ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </div>
                   </label>
 
@@ -653,11 +779,15 @@ export default function App() {
                       onChange={(e) => updateSettingField('showSeconds', e.target.checked)}
                       className="sr-only"
                     />
-                    <div 
+                    <div
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{ backgroundColor: settings.showSeconds ? currentTheme.accent : '#262626' }}
+                      style={{
+                        backgroundColor: settings.showSeconds ? currentTheme.accent : '#262626',
+                      }}
                     >
-                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showSeconds ? 'translate-x-4' : 'translate-x-0'}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showSeconds ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </div>
                   </label>
 
@@ -670,11 +800,15 @@ export default function App() {
                       onChange={(e) => updateSettingField('showHexClock', e.target.checked)}
                       className="sr-only"
                     />
-                    <div 
+                    <div
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{ backgroundColor: settings.showHexClock ? currentTheme.accent : '#262626' }}
+                      style={{
+                        backgroundColor: settings.showHexClock ? currentTheme.accent : '#262626',
+                      }}
                     >
-                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showHexClock ? 'translate-x-4' : 'translate-x-0'}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showHexClock ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </div>
                   </label>
 
@@ -687,11 +821,17 @@ export default function App() {
                       onChange={(e) => updateSettingField('techPingDelaySim', e.target.checked)}
                       className="sr-only"
                     />
-                    <div 
+                    <div
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{ backgroundColor: settings.techPingDelaySim ? currentTheme.accent : '#262626' }}
+                      style={{
+                        backgroundColor: settings.techPingDelaySim
+                          ? currentTheme.accent
+                          : '#262626',
+                      }}
                     >
-                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.techPingDelaySim ? 'translate-x-4' : 'translate-x-0'}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.techPingDelaySim ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </div>
                   </label>
 
@@ -711,23 +851,36 @@ export default function App() {
                         addLog(
                           'SYS',
                           'success',
-                          e.target.checked ? 'Work tracker activated: adjust shift times below' : 'Work tracker deactivated'
+                          e.target.checked
+                            ? 'Work tracker activated: adjust shift times below'
+                            : 'Work tracker deactivated',
                         );
                       }}
                       className="sr-only"
                     />
-                    <div 
+                    <div
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{ backgroundColor: settings.showWorkProgress ? currentTheme.accent : '#262626' }}
+                      style={{
+                        backgroundColor: settings.showWorkProgress
+                          ? currentTheme.accent
+                          : '#262626',
+                      }}
                     >
-                      <div className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showWorkProgress ? 'translate-x-4' : 'translate-x-0'}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showWorkProgress ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </div>
                   </label>
 
                   {settings.showWorkProgress && (
-                    <div className="pl-4 pb-2 flex gap-4 text-xs font-mono select-none" id="work-hours-adjust-inputs">
+                    <div
+                      className="pl-4 pb-2 flex gap-4 text-xs font-mono select-none"
+                      id="work-hours-adjust-inputs"
+                    >
                       <div className="flex flex-col">
-                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">Shift Start</span>
+                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">
+                          Shift Start
+                        </span>
                         <input
                           type="text"
                           value={settings.workStart || '09:00'}
@@ -736,7 +889,9 @@ export default function App() {
                         />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">Shift End</span>
+                        <span className="text-neutral-500 text-[9px] uppercase tracking-wider mb-1">
+                          Shift End
+                        </span>
                         <input
                           type="text"
                           value={settings.workEnd || '17:00'}
@@ -749,15 +904,19 @@ export default function App() {
                 </div>
 
                 {/* 5. System Configuration Backup (JSON) */}
-                <div className="space-y-2.5 pt-4 border-t border-neutral-900" id="system-telemetry-backup-wrapper">
+                <div
+                  className="space-y-2.5 pt-4 border-t border-neutral-900"
+                  id="system-telemetry-backup-wrapper"
+                >
                   <span className="text-[11px] text-neutral-400 uppercase tracking-widest block font-bold flex items-center gap-1.5">
                     <FolderSync className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
                     TELEMETRY CALIBRATION BACKUP
                   </span>
                   <p className="text-[10px] text-neutral-500 leading-normal">
-                    Export or import customized system nodes (bookmarks) and setup parameters as a JSON telemetry code.
+                    Export or import customized system nodes (bookmarks) and setup parameters —
+                    copy/paste the JSON below, or download/import it as a file.
                   </p>
-                  
+
                   <textarea
                     ref={telemetryRef}
                     defaultValue={JSON.stringify({ settings, pinnedSites })}
@@ -768,14 +927,18 @@ export default function App() {
                     placeholder="Telemetry backup string..."
                     id="system-telemetry-backup-data-field"
                   />
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         if (telemetryRef.current) {
                           navigator.clipboard.writeText(telemetryRef.current.value);
-                          addLog('SYS', 'success', 'Telemetry configuration backup string copied to clipboard');
+                          addLog(
+                            'SYS',
+                            'success',
+                            'Telemetry configuration backup string copied to clipboard',
+                          );
                         }
                       }}
                       className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
@@ -784,33 +947,33 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        const inputVal = telemetryRef.current?.value;
-                        if (!inputVal) return;
-                        try {
-                          const parsed = JSON.parse(inputVal);
-                          if (parsed && typeof parsed === 'object') {
-                            if (parsed.settings) {
-                              setSettings((prev) => ({ ...prev, ...parsed.settings }));
-                            }
-                            if (parsed.pinnedSites && Array.isArray(parsed.pinnedSites)) {
-                              setPinnedSites(parsed.pinnedSites);
-                            }
-                            addLog('SYS', 'success', 'System backup telemetry successfully restored');
-                            setTelemetryStatus({ ok: true, message: 'Backup restored successfully.' });
-                          } else {
-                            setTelemetryStatus({ ok: false, message: 'Invalid configuration layout.' });
-                          }
-                        } catch (err) {
-                          addLog('SYS', 'warning', 'Restoration sequence failed: Invalid segment format');
-                          setTelemetryStatus({ ok: false, message: 'Please paste a valid backup JSON format.' });
-                        }
-                        setTimeout(() => setTelemetryStatus(null), 4000);
-                      }}
+                      onClick={() => applyBackupPayload(telemetryRef.current?.value || '')}
                       className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
                     >
                       Restore System
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadBackup}
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                    >
+                      Download File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => backupFileInputRef.current?.click()}
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                    >
+                      Import File
+                    </button>
+                    <input
+                      ref={backupFileInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleImportBackupFile}
+                      className="hidden"
+                      id="system-telemetry-backup-file-input"
+                    />
                   </div>
                   {telemetryStatus && (
                     <div

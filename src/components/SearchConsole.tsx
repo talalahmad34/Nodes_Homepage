@@ -4,13 +4,18 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronRight, Terminal, Globe2, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, ChevronDown, Terminal, Sparkles } from 'lucide-react';
 import { SearchEngine, UserSettings } from '../types';
 
 interface SearchConsoleProps {
   settings: UserSettings;
   updateSettings: (key: keyof UserSettings, value: any) => void;
-  addLog: (module: 'SYS' | 'NET' | 'IO' | 'EXT', type: 'info' | 'success' | 'warning' | 'packet', message: string) => void;
+  addLog: (
+    module: 'SYS' | 'NET' | 'IO' | 'EXT',
+    type: 'info' | 'success' | 'warning' | 'packet',
+    message: string,
+  ) => void;
 }
 
 const SEARCH_ENGINES: SearchEngine[] = [
@@ -91,7 +96,21 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
   const [query, setQuery] = useState('');
   const [activeEngine, setActiveEngine] = useState<SearchEngine>(SEARCH_ENGINES[0]);
   const [isFocused, setIsFocused] = useState(false);
+  const [isEngineMenuOpen, setIsEngineMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const engineMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the engine picker on outside click
+  useEffect(() => {
+    if (!isEngineMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (engineMenuRef.current && !engineMenuRef.current.contains(e.target as Node)) {
+        setIsEngineMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isEngineMenuOpen]);
 
   // Sync active engine with settings
   useEffect(() => {
@@ -128,7 +147,11 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
     if (!query.trim()) return;
 
     const trimmedQuery = query.trim();
-    addLog('NET', 'success', `Search transmission initialized: engine=${activeEngine.name} payload="${trimmedQuery}"`);
+    addLog(
+      'NET',
+      'success',
+      `Search transmission initialized: engine=${activeEngine.name} payload="${trimmedQuery}"`,
+    );
 
     // Let the user know the target, and then execute client-side redirect
     let targetUrl = activeEngine.url + encodeURIComponent(trimmedQuery);
@@ -149,28 +172,41 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
     setActiveEngine(engine);
     updateSettings('searchEngineId', engine.id);
     addLog('SYS', 'info', `Routing engine changed manually: ${engine.name}`);
+    setIsEngineMenuOpen(false);
     inputRef.current?.focus();
   };
 
   const getThemeColor = () => {
     switch (settings.themeId) {
-      case 'emerald': return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
-      case 'cyan': return 'text-cyan-400 border-cyan-500/20 shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20';
-      case 'amber': return 'text-amber-400 border-amber-500/20 shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20';
-      case 'purple': return 'text-purple-400 border-purple-500/20 shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20';
-      case 'rose': return 'text-rose-400 border-rose-500/20 shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20';
-      default: return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
+      case 'emerald':
+        return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
+      case 'cyan':
+        return 'text-cyan-400 border-cyan-500/20 shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20';
+      case 'amber':
+        return 'text-amber-400 border-amber-500/20 shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20';
+      case 'purple':
+        return 'text-purple-400 border-purple-500/20 shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20';
+      case 'rose':
+        return 'text-rose-400 border-rose-500/20 shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20';
+      default:
+        return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
     }
   };
 
   const getThemeAccentColor = () => {
     switch (settings.themeId) {
-      case 'emerald': return '#34d399';
-      case 'cyan': return '#22d3ee';
-      case 'amber': return '#fbbf24';
-      case 'purple': return '#c084fc';
-      case 'rose': return '#fb7185';
-      default: return '#34d399';
+      case 'emerald':
+        return '#34d399';
+      case 'cyan':
+        return '#22d3ee';
+      case 'amber':
+        return '#fbbf24';
+      case 'purple':
+        return '#c084fc';
+      case 'rose':
+        return '#fb7185';
+      default:
+        return '#34d399';
     }
   };
 
@@ -178,21 +214,69 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
   const accentColor = getThemeAccentColor();
 
   return (
-    <div className="w-full max-w-4xl flex flex-col items-center animate-fade-in" id="search-console-wrapper">
+    <div
+      className="w-full max-w-4xl flex flex-col items-center animate-fade-in"
+      id="search-console-wrapper"
+    >
       <form
         onSubmit={handleSearchSubmit}
         className={`w-full flex items-center bg-neutral-950/80 backdrop-blur-md rounded-xl border ${themeClass} shadow-xl ring-1 transition-all duration-300 py-1.5 pl-4 pr-2.5 z-10`}
-        style={isFocused ? {
-          boxShadow: `0 0 20px ${accentColor}35, inset 0 0 10px ${accentColor}15`,
-          borderColor: accentColor,
-        } : undefined}
+        style={
+          isFocused
+            ? {
+                boxShadow: `0 0 20px ${accentColor}35, inset 0 0 10px ${accentColor}15`,
+                borderColor: accentColor,
+              }
+            : undefined
+        }
       >
-        <span className="flex items-center text-neutral-400 mr-3 shrink-0 select-none">
-          <Terminal className="w-4.5 h-4.5 mr-1.5 text-neutral-500" />
-          <span className="text-xs font-mono tracking-wider font-bold text-neutral-400 uppercase">
-            {activeEngine.name.substring(0, 3)}:
-          </span>
-        </span>
+        <div className="relative shrink-0" ref={engineMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsEngineMenuOpen((prev) => !prev)}
+            aria-label={`Change search engine (currently ${activeEngine.name})`}
+            aria-expanded={isEngineMenuOpen}
+            className="flex items-center text-neutral-400 mr-3 select-none hover:text-neutral-200 transition-colors cursor-pointer"
+          >
+            <Terminal className="w-4.5 h-4.5 mr-1.5 text-neutral-500" />
+            <span className="text-xs font-mono tracking-wider font-bold text-neutral-400 uppercase">
+              {activeEngine.name.substring(0, 3)}:
+            </span>
+            <ChevronDown
+              className={`w-3 h-3 ml-0.5 text-neutral-600 transition-transform ${isEngineMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          <AnimatePresence>
+            {isEngineMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute top-full left-0 mt-2 w-44 bg-neutral-950 border border-neutral-800 rounded-lg shadow-2xl overflow-hidden z-20 font-mono"
+                id="search-engine-picker-menu"
+              >
+                {SEARCH_ENGINES.map((engine) => (
+                  <button
+                    key={engine.id}
+                    type="button"
+                    onClick={() => selectEngine(engine)}
+                    className={`w-full text-left px-3 py-2 text-xs uppercase tracking-wide transition-all cursor-pointer flex items-center justify-between ${
+                      engine.id === activeEngine.id
+                        ? 'bg-neutral-900 text-white font-bold'
+                        : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200'
+                    }`}
+                  >
+                    {engine.name}
+                    <span className="text-neutral-600 text-[10px] normal-case">
+                      {engine.shortcut}
+                    </span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         <input
           ref={inputRef}
@@ -219,7 +303,10 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
       </form>
 
       {/* Dedicated Pinned AI Infrastructure Sections */}
-      <div className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10" id="dedicated-ai-terminals-wrapper">
+      <div
+        className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10"
+        id="dedicated-ai-terminals-wrapper"
+      >
         {AI_PORTALS.map((portal) => {
           return (
             <a
@@ -227,38 +314,49 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
               href={portal.url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => addLog('EXT', 'info', `Direct linkage: Routed telemetry query to ${portal.name} node`)}
+              onClick={() =>
+                addLog(
+                  'EXT',
+                  'info',
+                  `Direct linkage: Routed telemetry query to ${portal.name} node`,
+                )
+              }
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 e.currentTarget.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
                 e.currentTarget.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
               }}
               className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-all duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
-              style={{
-                '--hover-glow': accentColor,
-                '--mouse-x': '50%',
-                '--mouse-y': '50%'
-              } as React.CSSProperties}
+              style={
+                {
+                  '--hover-glow': accentColor,
+                  '--mouse-x': '50%',
+                  '--mouse-y': '50%',
+                } as React.CSSProperties
+              }
             >
               {/* Dynamic theme mouse spotlight glow when hovered */}
-              <div 
+              <div
                 className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                 style={{
-                  background: `radial-gradient(110px circle at var(--mouse-x) var(--mouse-y), ${accentColor}24, transparent 80%)`
+                  background: `radial-gradient(110px circle at var(--mouse-x) var(--mouse-y), ${accentColor}24, transparent 80%)`,
                 }}
               />
 
               {/* Dynamic theme glow when hovered */}
-              <div 
+              <div
                 className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-300"
                 style={{
-                  backgroundImage: `radial-gradient(circle at 100% 100%, ${accentColor}1A, transparent)`
+                  backgroundImage: `radial-gradient(circle at 100% 100%, ${accentColor}1A, transparent)`,
                 }}
               />
-              
+
               <div className="space-y-0.5 relative z-10 group-hover:translate-x-1.5 transition-transform duration-300">
                 <div className="flex items-center gap-1.5 font-mono">
-                  <Sparkles className="w-3.5 h-3.5 text-neutral-500 group-hover:text-[var(--hover-glow)] transition-colors duration-300 shrink-0" style={{ color: accentColor }} />
+                  <Sparkles
+                    className="w-3.5 h-3.5 text-neutral-500 group-hover:text-[var(--hover-glow)] transition-colors duration-300 shrink-0"
+                    style={{ color: accentColor }}
+                  />
                   <span className="text-xs font-bold tracking-wider text-neutral-200 group-hover:text-white transition-colors duration-300 uppercase">
                     {portal.name}
                   </span>
@@ -267,13 +365,16 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
                   {portal.desc}
                 </div>
               </div>
-              
+
               <div className="flex flex-col items-end justify-between h-full min-h-[34px] relative z-10 font-mono text-[8px] tracking-widest shrink-0">
                 <span className="px-1.5 py-0.5 rounded border border-neutral-800/60 bg-neutral-950/80 text-neutral-500 text-xxs scale-90 origin-top-right uppercase font-semibold">
                   {portal.tag}
                 </span>
                 <span className="flex items-center gap-1 text-[8px] text-neutral-600 scale-90 origin-bottom-right group-hover:text-[var(--hover-glow)] transition-all">
-                  <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" style={{ backgroundColor: accentColor }} />
+                  <span
+                    className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"
+                    style={{ backgroundColor: accentColor }}
+                  />
                   LINK
                 </span>
               </div>

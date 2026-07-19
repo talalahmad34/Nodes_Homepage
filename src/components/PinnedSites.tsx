@@ -5,7 +5,17 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, X, Edit2, Trash2, HelpCircle, LayoutGrid, Globe, Globe2, GripVertical } from 'lucide-react';
+import {
+  Plus,
+  X,
+  Edit2,
+  Trash2,
+  HelpCircle,
+  LayoutGrid,
+  Globe,
+  Globe2,
+  GripVertical,
+} from 'lucide-react';
 import { PinnedSite, UserSettings } from '../types';
 
 // Free, no-key-required favicon lookup service — used for the "Site Favicon" icon option.
@@ -44,7 +54,11 @@ interface PinnedSitesProps {
   onDeleteSite: (id: string) => void;
   onUpdateSiteVisits: (id: string) => void;
   onReorderSites: (sites: PinnedSite[]) => void;
-  addLog: (module: 'SYS' | 'NET' | 'IO' | 'EXT', type: 'info' | 'success' | 'warning' | 'packet', message: string) => void;
+  addLog: (
+    module: 'SYS' | 'NET' | 'IO' | 'EXT',
+    type: 'info' | 'success' | 'warning' | 'packet',
+    message: string,
+  ) => void;
 }
 
 export default function PinnedSites({
@@ -89,12 +103,12 @@ export default function PinnedSites({
   // Ensure every site has a unique position
   const sitesWithPositions = React.useMemo(() => {
     let updated = false;
-    const resolved = pinnedSites.map(s => ({ ...s }));
-    
+    const resolved = pinnedSites.map((s) => ({ ...s }));
+
     resolved.forEach((site) => {
       if (site.position === undefined) {
         let emptyPos = 0;
-        while (resolved.some(s => s.position === emptyPos)) {
+        while (resolved.some((s) => s.position === emptyPos)) {
           emptyPos++;
         }
         site.position = emptyPos;
@@ -105,7 +119,7 @@ export default function PinnedSites({
     if (updated) {
       setTimeout(() => onReorderSites(resolved), 0);
     }
-    
+
     return resolved.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }, [pinnedSites, onReorderSites]);
 
@@ -131,7 +145,7 @@ export default function PinnedSites({
   const handleDragStart = (e: React.DragEvent, positionIndex: number) => {
     setDraggedIdx(positionIndex);
     e.dataTransfer.effectAllowed = 'move';
-    const site = sitesWithPositions.find(s => s.position === positionIndex);
+    const site = sitesWithPositions.find((s) => s.position === positionIndex);
     if (site) {
       addLog('SYS', 'info', `Initiated rearrange calibration on node [${site.title}]`);
     }
@@ -147,11 +161,11 @@ export default function PinnedSites({
     e.preventDefault();
     if (draggedIdx === null || draggedIdx === targetPosition) return;
 
-    const sourceSite = sitesWithPositions.find(s => s.position === draggedIdx);
-    const targetSite = sitesWithPositions.find(s => s.position === targetPosition);
+    const sourceSite = sitesWithPositions.find((s) => s.position === draggedIdx);
+    const targetSite = sitesWithPositions.find((s) => s.position === targetPosition);
 
     if (sourceSite) {
-      const updated = sitesWithPositions.map(s => {
+      const updated = sitesWithPositions.map((s) => {
         if (s.id === sourceSite.id) {
           return { ...s, position: targetPosition };
         }
@@ -161,7 +175,11 @@ export default function PinnedSites({
         return s;
       });
       onReorderSites(updated);
-      addLog('SYS', 'success', `Configuration path routed: Moved '${sourceSite.title}' to slot ${targetPosition + 1}`);
+      addLog(
+        'SYS',
+        'success',
+        `Configuration path routed: Moved '${sourceSite.title}' to slot ${targetPosition + 1}`,
+      );
     }
 
     setDraggedIdx(null);
@@ -171,6 +189,37 @@ export default function PinnedSites({
   const handleDragEnd = () => {
     setDraggedIdx(null);
     setHoveredDragIdx(null);
+  };
+
+  // Keyboard-accessible alternative to mouse drag-and-drop: swaps a node with
+  // whichever node (if any) currently occupies the adjacent slot.
+  const moveByKeyboard = (site: PinnedSite, direction: -1 | 1) => {
+    const currentPosition = site.position ?? 0;
+    const targetPosition = currentPosition + direction;
+    if (targetPosition < 0) return;
+
+    const targetSite = sitesWithPositions.find((s) => s.position === targetPosition);
+    const updated = sitesWithPositions.map((s) => {
+      if (s.id === site.id) return { ...s, position: targetPosition };
+      if (targetSite && s.id === targetSite.id) return { ...s, position: currentPosition };
+      return s;
+    });
+    onReorderSites(updated);
+    addLog(
+      'SYS',
+      'success',
+      `Configuration path routed: Moved '${site.title}' to slot ${targetPosition + 1}`,
+    );
+  };
+
+  const handleGripKeyDown = (e: React.KeyboardEvent, site: PinnedSite) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveByKeyboard(site, -1);
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveByKeyboard(site, 1);
+    }
   };
 
   const openAddModal = () => {
@@ -211,7 +260,7 @@ export default function PinnedSites({
         if (iconType === 'initials' && !iconValue) {
           setIconValue(namePart.substring(0, 2).toUpperCase());
         }
-      } catch (err) {
+      } catch {
         // Silent error
       }
     }
@@ -259,7 +308,7 @@ export default function PinnedSites({
   const handleCardClick = (id: string, url: string) => {
     onUpdateSiteVisits(id);
     addLog('NET', 'packet', `Socket stream forwarding: routing client interface -> ${url}`);
-    
+
     // Smooth delay for log visualization then redirect
     setTimeout(() => {
       window.location.href = url;
@@ -268,50 +317,113 @@ export default function PinnedSites({
 
   const handleCardMiddleClick = (id: string, url: string) => {
     onUpdateSiteVisits(id);
-    addLog('NET', 'packet', `Socket stream forwarding: routing client interface (new tab) -> ${url}`);
+    addLog(
+      'NET',
+      'packet',
+      `Socket stream forwarding: routing client interface (new tab) -> ${url}`,
+    );
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // Group sites by category if desired, or render flat grid
-  const categories = Array.from(
-    new Set(pinnedSites.map((s) => s.category || 'General'))
-  );
-
   const getThemeColors = () => {
     switch (settings.themeId) {
-      case 'emerald': return { text: 'text-emerald-400', border: 'border-emerald-500/20', hoverBorder: 'group-hover:border-emerald-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]', glowRGB: '52, 211, 153', modalBtn: 'bg-emerald-500 hover:bg-emerald-600' };
-      case 'cyan': return { text: 'text-cyan-400', border: 'border-cyan-500/20', hoverBorder: 'group-hover:border-cyan-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(34,211,238,0.3)]', glowRGB: '34, 211, 238', modalBtn: 'bg-cyan-500 hover:bg-cyan-600' };
-      case 'amber': return { text: 'text-amber-400', border: 'border-amber-500/20', hoverBorder: 'group-hover:border-amber-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]', glowRGB: '251, 191, 36', modalBtn: 'bg-amber-500 hover:bg-amber-600' };
-      case 'purple': return { text: 'text-purple-400', border: 'border-purple-500/20', hoverBorder: 'group-hover:border-purple-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(192,132,252,0.3)]', glowRGB: '192, 132, 252', modalBtn: 'bg-purple-500 hover:bg-purple-600' };
-      case 'rose': return { text: 'text-rose-400', border: 'border-rose-500/20', hoverBorder: 'group-hover:border-rose-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,113,133,0.3)]', glowRGB: '251, 113, 133', modalBtn: 'bg-rose-500 hover:bg-rose-600' };
-      default: return { text: 'text-emerald-400', border: 'border-emerald-500/20', hoverBorder: 'group-hover:border-emerald-400/50', iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]', glowRGB: '52, 211, 153', modalBtn: 'bg-emerald-500 hover:bg-emerald-600' };
+      case 'emerald':
+        return {
+          text: 'text-emerald-400',
+          border: 'border-emerald-500/20',
+          hoverBorder: 'group-hover:border-emerald-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]',
+          glowRGB: '52, 211, 153',
+          modalBtn: 'bg-emerald-500 hover:bg-emerald-600',
+        };
+      case 'cyan':
+        return {
+          text: 'text-cyan-400',
+          border: 'border-cyan-500/20',
+          hoverBorder: 'group-hover:border-cyan-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(34,211,238,0.3)]',
+          glowRGB: '34, 211, 238',
+          modalBtn: 'bg-cyan-500 hover:bg-cyan-600',
+        };
+      case 'amber':
+        return {
+          text: 'text-amber-400',
+          border: 'border-amber-500/20',
+          hoverBorder: 'group-hover:border-amber-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]',
+          glowRGB: '251, 191, 36',
+          modalBtn: 'bg-amber-500 hover:bg-amber-600',
+        };
+      case 'purple':
+        return {
+          text: 'text-purple-400',
+          border: 'border-purple-500/20',
+          hoverBorder: 'group-hover:border-purple-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(192,132,252,0.3)]',
+          glowRGB: '192, 132, 252',
+          modalBtn: 'bg-purple-500 hover:bg-purple-600',
+        };
+      case 'rose':
+        return {
+          text: 'text-rose-400',
+          border: 'border-rose-500/20',
+          hoverBorder: 'group-hover:border-rose-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,113,133,0.3)]',
+          glowRGB: '251, 113, 133',
+          modalBtn: 'bg-rose-500 hover:bg-rose-600',
+        };
+      default:
+        return {
+          text: 'text-emerald-400',
+          border: 'border-emerald-500/20',
+          hoverBorder: 'group-hover:border-emerald-400/50',
+          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]',
+          glowRGB: '52, 211, 153',
+          modalBtn: 'bg-emerald-500 hover:bg-emerald-600',
+        };
     }
   };
 
   const colors = getThemeColors();
 
   return (
-    <div className="w-full max-w-none px-2 mt-2 flex flex-col items-center" id="pinned-node-grid-hub">
-      
+    <div
+      className="w-full max-w-none px-2 mt-2 flex flex-col items-center"
+      id="pinned-node-grid-hub"
+    >
       {/* Category Tabs & Header */}
       <div className="w-full mb-4 z-10">
         <div className="flex items-center gap-4 mb-3">
           <div className="h-px flex-grow bg-neutral-800/40"></div>
           <div className="text-[11px] uppercase tracking-[0.3em] text-neutral-400 font-mono flex items-center gap-2">
             <LayoutGrid className={`w-3.5 h-3.5 ${colors.text}`} />
-            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [DRAG TO REARRANGE]
+            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [DRAG OR ARROW KEYS TO REARRANGE]
           </div>
           <div className="h-px flex-grow bg-neutral-800/40 font-mono"></div>
-          
+
           {/* Manual Grid Toggle Button */}
           <button
             onClick={() => setIsManualGrid(!isManualGrid)}
             className={`flex items-center gap-1.5 border font-mono text-[10px] uppercase py-1 px-3 rounded transition-all duration-300 cursor-pointer ${
-              isManualGrid 
+              isManualGrid
                 ? 'bg-neutral-900 text-white shadow-md'
                 : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-300 hover:border-neutral-700'
             }`}
-            style={isManualGrid ? { borderColor: colors.text.includes('emerald') ? '#34d399' : colors.text.includes('cyan') ? '#22d3ee' : colors.text.includes('amber') ? '#fbbf24' : colors.text.includes('purple') ? '#c084fc' : '#fb7185' } : undefined}
+            style={
+              isManualGrid
+                ? {
+                    borderColor: colors.text.includes('emerald')
+                      ? '#34d399'
+                      : colors.text.includes('cyan')
+                        ? '#22d3ee'
+                        : colors.text.includes('amber')
+                          ? '#fbbf24'
+                          : colors.text.includes('purple')
+                            ? '#c084fc'
+                            : '#fb7185',
+                  }
+                : undefined
+            }
           >
             <LayoutGrid className="w-3.5 h-3.5" />
             {isManualGrid ? 'Grid Mode: ON' : 'Manual Grid'}
@@ -330,8 +442,11 @@ export default function PinnedSites({
 
       {/* Grid displays */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 w-full z-10">
-        {(isManualGrid ? Array.from({ length: totalSlotsCount }, (_, i) => i) : sitesWithPositions.map(s => s.position ?? 0)).map((posIndex, index) => {
-          const site = sitesWithPositions.find(s => s.position === posIndex);
+        {(isManualGrid
+          ? Array.from({ length: totalSlotsCount }, (_, i) => i)
+          : sitesWithPositions.map((s) => s.position ?? 0)
+        ).map((posIndex, index) => {
+          const site = sitesWithPositions.find((s) => s.position === posIndex);
 
           if (!site) {
             const isHoveredSlot = hoveredDragIdx === posIndex;
@@ -387,21 +502,21 @@ export default function PinnedSites({
               onDragLeave={() => setHoveredDragIdx(null)}
             >
               {/* Floating Holographic Glow Border background */}
-              <div 
+              <div
                 className={`absolute -inset-[1px] rounded-xl bg-gradient-to-r from-transparent to-transparent group-hover:from-neutral-800 group-hover:to-neutral-900 transition-all duration-300 pointer-events-none -z-10`}
                 style={{
-                  boxShadow: isHoveredIdx 
-                    ? `0 0 18px rgba(${colors.glowRGB}, 0.25)` 
-                    : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`
+                  boxShadow: isHoveredIdx
+                    ? `0 0 18px rgba(${colors.glowRGB}, 0.25)`
+                    : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`,
                 }}
               />
 
               <div
                 className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-950/40 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
-                  isDraggedIdx 
-                    ? 'border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80' 
+                  isDraggedIdx
+                    ? 'border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80'
                     : isHoveredIdx
-                      ? `border-neutral-500 scale-102 bg-neutral-900/40 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]` 
+                      ? `border-neutral-500 scale-102 bg-neutral-900/40 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
                       : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/10`
                 }`}
                 onClick={() => handleCardClick(site.id, site.url)}
@@ -414,7 +529,7 @@ export default function PinnedSites({
               >
                 {/* Tech scanline visual lines within individual bookmark */}
                 <div className="absolute right-0 top-0 h-full w-[2px] bg-gradient-to-b from-transparent via-neutral-800/10 to-transparent" />
-                
+
                 {/* Visual Top Bar decoration */}
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center space-x-1.5 font-mono text-[10px] text-neutral-500">
@@ -441,7 +556,11 @@ export default function PinnedSites({
                         e.stopPropagation();
                         requestDelete(site);
                       }}
-                      aria-label={confirmDeleteId === site.id ? `Confirm delete ${site.title}` : `Delete ${site.title}`}
+                      aria-label={
+                        confirmDeleteId === site.id
+                          ? `Confirm delete ${site.title}`
+                          : `Delete ${site.title}`
+                      }
                       title={confirmDeleteId === site.id ? 'Click again to confirm' : undefined}
                       className={`p-1 rounded transition-all cursor-pointer ${
                         confirmDeleteId === site.id
@@ -480,7 +599,9 @@ export default function PinnedSites({
                 {/* Base status and tracking coordinates inside connection */}
                 <div className="flex items-center justify-between w-full pt-1">
                   <div className="flex items-center space-x-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:animate-ping`} />
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:animate-ping`}
+                    />
                     <span className="text-[10px] font-mono text-neutral-500 group-hover:text-neutral-300 transition-colors uppercase">
                       socket_ok
                     </span>
@@ -506,8 +627,15 @@ export default function PinnedSites({
                       e.stopPropagation();
                       e.preventDefault();
                     }}
-                    className="p-1 px-1.5 rounded bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700/80 hover:bg-neutral-850/80 cursor-grab active:cursor-grabbing transition-all text-neutral-500 hover:text-neutral-300 transform group-hover:scale-105"
-                    title="Hover to Grab & Drag Node"
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      handleGripKeyDown(e, site);
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Reorder ${site.title}. Use arrow keys to move it earlier or later in the grid.`}
+                    className="p-1 px-1.5 rounded bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700/80 hover:bg-neutral-850/80 focus:border-neutral-500 focus:outline-none cursor-grab active:cursor-grabbing transition-all text-neutral-500 hover:text-neutral-300 transform group-hover:scale-105"
+                    title="Hover to Grab & Drag, or focus and use Arrow keys to reorder"
                   >
                     <GripVertical className="w-3.5 h-3.5" />
                   </div>
@@ -543,7 +671,9 @@ export default function PinnedSites({
               <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-neutral-700" />
 
               <div className="flex justify-between items-center mb-4 pb-2 border-b border-neutral-900">
-                <span className={`text-[11px] font-mono text-neutral-400 tracking-[0.2em] font-medium uppercase`}>
+                <span
+                  className={`text-[11px] font-mono text-neutral-400 tracking-[0.2em] font-medium uppercase`}
+                >
                   {editingSite ? 'CALIBRATE CONNECTION_NODE' : 'REGISTER CONNECTION_NODE'}
                 </span>
                 <button
@@ -592,7 +722,9 @@ export default function PinnedSites({
                 <div className="grid grid-cols-3 gap-2 pb-1.5">
                   <button
                     type="button"
-                    onClick={() => { setIconType('initials'); }}
+                    onClick={() => {
+                      setIconType('initials');
+                    }}
                     className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
                       iconType === 'initials'
                         ? `${colors.border} bg-neutral-900 text-white`
@@ -603,7 +735,10 @@ export default function PinnedSites({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setIconType('custom'); setIconValue(getFaviconUrl(url)); }}
+                    onClick={() => {
+                      setIconType('custom');
+                      setIconValue(getFaviconUrl(url));
+                    }}
                     className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
                       iconType === 'custom'
                         ? `${colors.border} bg-neutral-900 text-white`
@@ -614,7 +749,10 @@ export default function PinnedSites({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setIconType('icon'); setIconValue('globe'); }}
+                    onClick={() => {
+                      setIconType('icon');
+                      setIconValue('globe');
+                    }}
                     className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
                       iconType === 'icon'
                         ? `${colors.border} bg-neutral-900 text-white`

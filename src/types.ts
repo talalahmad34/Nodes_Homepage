@@ -26,11 +26,11 @@ export interface SearchEngine {
 export interface SystemTheme {
   id: string;
   name: string;
-  primary: string;      // Tailwind custom theme color (e.g., "emerald-400")
-  secondary: string;    // Secondary tech color
-  accent: string;       // Accent light
-  bgClass: string;      // Background radial gradient styling
-  terminalColor: string;// Color code for terminal aesthetics
+  primary: string; // Tailwind custom theme color (e.g., "emerald-400")
+  secondary: string; // Secondary tech color
+  accent: string; // Accent light
+  bgClass: string; // Background radial gradient styling
+  terminalColor: string; // Color code for terminal aesthetics
 }
 
 export interface UserSettings {

@@ -1,0 +1,7 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+// Injected by vite.config.ts's `define` from package.json's version field.
+declare const __APP_VERSION__: string;
