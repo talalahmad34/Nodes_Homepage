@@ -32,41 +32,48 @@ interface NetworkBackgroundProps {
   colorTheme: string; // Hex or tailwind colors
 }
 
-export default function NetworkBackground({ type = 'network', colorTheme }: NetworkBackgroundProps) {
+export default function NetworkBackground({
+  type = 'network',
+  colorTheme,
+}: NetworkBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Coerce raw type to make sure it is always stable and defaults to network
-  const bgType = (type === 'network' || type === 'starfield' || type === 'grid') ? type : 'network';
+  const bgType = type === 'network' || type === 'starfield' || type === 'grid' ? type : 'network';
 
   // Store mouse coordinates
   const mouseRef = useRef({ x: -1000, y: -1000, active: false });
   // Store active wave pulses across clicks and frames
   const pulsesRef = useRef<Pulse[]>([]);
 
-  // Map theme colors to CSS/Canvas colors
-  const getThemeColor = () => {
-    switch (colorTheme) {
-      case 'emerald-400': return { primary: '#34d399', secondary: '#059669', opacity: 'rgba(52, 211, 153, 0.15)' };
-      case 'cyan-400': return { primary: '#22d3ee', secondary: '#0891b2', opacity: 'rgba(34, 211, 238, 0.15)' };
-      case 'amber-400': return { primary: '#fbbf24', secondary: '#d97706', opacity: 'rgba(251, 191, 36, 0.15)' };
-      case 'purple-400': return { primary: '#c084fc', secondary: '#9333ea', opacity: 'rgba(192, 132, 252, 0.15)' };
-      case 'rose-400': return { primary: '#fb7185', secondary: '#e11d48', opacity: 'rgba(251, 113, 133, 0.15)' };
-      default: return { primary: '#34d399', secondary: '#059669', opacity: 'rgba(52, 211, 153, 0.15)' };
-    }
-  };
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
+    // Map theme colors to CSS/Canvas colors
+    const getThemeColor = () => {
+      switch (colorTheme) {
+        case 'emerald-400':
+          return { primary: '#34d399', secondary: '#059669', opacity: 'rgba(52, 211, 153, 0.15)' };
+        case 'cyan-400':
+          return { primary: '#22d3ee', secondary: '#0891b2', opacity: 'rgba(34, 211, 238, 0.15)' };
+        case 'amber-400':
+          return { primary: '#fbbf24', secondary: '#d97706', opacity: 'rgba(251, 191, 36, 0.15)' };
+        case 'purple-400':
+          return { primary: '#c084fc', secondary: '#9333ea', opacity: 'rgba(192, 132, 252, 0.15)' };
+        case 'rose-400':
+          return { primary: '#fb7185', secondary: '#e11d48', opacity: 'rgba(251, 113, 133, 0.15)' };
+        default:
+          return { primary: '#34d399', secondary: '#059669', opacity: 'rgba(52, 211, 153, 0.15)' };
+      }
+    };
     if (!ctx) return;
 
     let animationFrameId: number;
     let particles: Particle[] = [];
     const pulses = pulsesRef.current;
-    let frameCount = 0;
     let cachedNodeCenters: { x: number; y: number }[] = [];
     const maxParticles = bgType === 'network' ? 70 : bgType === 'grid' ? 100 : 120;
     const connectionDist = 120;
@@ -101,7 +108,8 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
         const rows = Math.floor(height / 60);
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            if (Math.random() < 0.25) { // Spawn rate
+            if (Math.random() < 0.25) {
+              // Spawn rate
               const gridX = c * 60 + 30;
               const gridY = r * 60 + 30;
               particles.push({
@@ -119,13 +127,14 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
             }
           }
         }
-      } else { // Starfield
+      } else {
+        // Starfield
         for (let i = 0; i < maxParticles; i++) {
           particles.push({
             x: Math.random() * width,
             y: Math.random() * height,
             vx: 0,
-            vy: - (Math.random() * 0.4 + 0.1), // Float upwards
+            vy: -(Math.random() * 0.4 + 0.1), // Float upwards
             radius: Math.random() * 1.8 + 0.3,
             color: Math.random() > 0.3 ? colors.primary : '#ffffff',
           });
@@ -133,17 +142,40 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
       }
     };
 
+    // The animated line connectors below track the on-screen position of the pinned-site
+    // tiles (`.bookmark-tile-node`). Rather than re-querying and measuring every tile on a
+    // fixed frame interval regardless of whether anything changed, invalidate the cached
+    // positions only when the grid actually changes shape (nodes added/removed/reordered)
+    // or the viewport resizes, and rescan the tiles once a short debounce settles.
+    let tileRescanNeeded = true;
+    let tileRescanTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleTileRescan = () => {
+      if (tileRescanTimer) clearTimeout(tileRescanTimer);
+      tileRescanTimer = setTimeout(() => {
+        tileRescanNeeded = true;
+      }, 120);
+    };
+
     // Initialize observer for resize
     const resizeObserver = new ResizeObserver(() => {
       resizeCanvas();
+      scheduleTileRescan();
     });
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
+    const container = containerRef.current;
+    if (container) {
+      resizeObserver.observe(container);
     }
 
     // Set initial size
     resizeCanvas();
+
+    // Watches the pinned-site grid for nodes being added, removed, or reordered
+    // (childList changes only — deliberately ignores style/class mutations so that
+    // hover/drag animations elsewhere on the page don't trigger constant rescans).
+    const gridContainer = document.getElementById('pinned-node-grid-hub') ?? document.body;
+    const gridMutationObserver = new MutationObserver(scheduleTileRescan);
+    gridMutationObserver.observe(gridContainer, { childList: true, subtree: true });
 
     const draw = () => {
       const colors = getThemeColor();
@@ -172,7 +204,7 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
           ctx.stroke();
         }
 
-        // Concentric radial coordinate scanlines 
+        // Concentric radial coordinate scanlines
         ctx.strokeStyle = `rgba(${colors.primary === '#34d399' ? '52, 211, 153' : colors.primary === '#22d3ee' ? '34, 211, 238' : '251, 191, 36'}, 0.012)`;
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3, 0, Math.PI * 2);
@@ -185,7 +217,7 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
       // Draw active background pulse expanders
       pulses.forEach((pulse, index) => {
         pulse.radius += pulse.speed;
-        pulse.alpha = Math.max(0, 1 - (pulse.radius / pulse.maxRadius));
+        pulse.alpha = Math.max(0, 1 - pulse.radius / pulse.maxRadius);
 
         ctx.strokeStyle = `rgba(${colors.primary === '#34d399' ? '52, 211, 153' : colors.primary === '#22d3ee' ? '34, 211, 238' : '251, 191, 36'}, ${pulse.alpha * 0.15})`;
         ctx.lineWidth = 2;
@@ -206,11 +238,16 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
 
       // Node connection math
       if (bgType === 'network') {
-        const networkColorRGB = colors.primary === '#34d399' ? '52, 211, 153'
-          : colors.primary === '#22d3ee' ? '34, 211, 238'
-          : colors.primary === '#fbbf24' ? '251, 191, 36'
-          : colors.primary === '#c084fc' ? '192, 132, 252'
-          : '251, 113, 133';
+        const networkColorRGB =
+          colors.primary === '#34d399'
+            ? '52, 211, 153'
+            : colors.primary === '#22d3ee'
+              ? '34, 211, 238'
+              : colors.primary === '#fbbf24'
+                ? '251, 191, 36'
+                : colors.primary === '#c084fc'
+                  ? '192, 132, 252'
+                  : '251, 113, 133';
 
         // Connect particles within grid
         for (let i = 0; i < particles.length; i++) {
@@ -337,36 +374,41 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
       });
 
       // Live Grid Particle HTML Node-block connects
-      frameCount++;
-      if (frameCount % 15 === 0 || cachedNodeCenters.length === 0) {
+      if (tileRescanNeeded || cachedNodeCenters.length === 0) {
+        tileRescanNeeded = false;
         cachedNodeCenters = [];
         const tiles = document.querySelectorAll('.bookmark-tile-node');
         const canvasRect = canvas.getBoundingClientRect();
         tiles.forEach((tile) => {
           const rect = tile.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
-            const cx = (rect.left + rect.width / 2) - canvasRect.left;
-            const cy = (rect.top + rect.height / 2) - canvasRect.top;
+            const cx = rect.left + rect.width / 2 - canvasRect.left;
+            const cy = rect.top + rect.height / 2 - canvasRect.top;
             cachedNodeCenters.push({ x: cx, y: cy });
           }
         });
       }
 
-      const activeColorRGB = colors.primary === '#34d399' ? '52, 211, 153'
-        : colors.primary === '#22d3ee' ? '34, 211, 238'
-        : colors.primary === '#fbbf24' ? '251, 191, 36'
-        : colors.primary === '#c084fc' ? '192, 132, 252'
-        : '251, 113, 133';
+      const activeColorRGB =
+        colors.primary === '#34d399'
+          ? '52, 211, 153'
+          : colors.primary === '#22d3ee'
+            ? '34, 211, 238'
+            : colors.primary === '#fbbf24'
+              ? '251, 191, 36'
+              : colors.primary === '#c084fc'
+                ? '192, 132, 252'
+                : '251, 113, 133';
 
       cachedNodeCenters.forEach((node) => {
         if (mouseRef.current.active) {
           const mdx = node.x - mouseRef.current.x;
           const mdy = node.y - mouseRef.current.y;
           const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-          
+
           if (mdist < 220) {
             const alpha = (1 - mdist / 220) * 0.18;
-            
+
             // Draw a high-tech dotted pointer connector link line
             ctx.strokeStyle = `rgba(${activeColorRGB}, ${alpha})`;
             ctx.lineWidth = 1;
@@ -376,13 +418,13 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
             ctx.lineTo(mouseRef.current.x, mouseRef.current.y);
             ctx.stroke();
             ctx.setLineDash([]); // Reset
-            
+
             // Draw tactile indicator points on the grid canvas
             ctx.fillStyle = colors.primary;
             ctx.beginPath();
             ctx.arc(node.x, node.y, 2.5, 0, Math.PI * 2);
             ctx.fill();
-            
+
             // Neon pulse ring
             ctx.strokeStyle = `rgba(${activeColorRGB}, ${alpha * 0.45})`;
             ctx.lineWidth = 1;
@@ -406,10 +448,12 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      if (containerRef.current) {
-        resizeObserver.unobserve(containerRef.current);
+      if (container) {
+        resizeObserver.unobserve(container);
       }
       resizeObserver.disconnect();
+      gridMutationObserver.disconnect();
+      if (tileRescanTimer) clearTimeout(tileRescanTimer);
     };
   }, [bgType, colorTheme]);
 
@@ -454,11 +498,7 @@ export default function NetworkBackground({ type = 'network', colorTheme }: Netw
       onClick={handleCanvasClick}
       id="canvas-network-wrapper"
     >
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full block"
-        id="cyber-network-canvas"
-      />
+      <canvas ref={canvasRef} className="w-full h-full block" id="cyber-network-canvas" />
     </div>
   );
 }

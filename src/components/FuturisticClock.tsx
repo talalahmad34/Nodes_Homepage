@@ -4,13 +4,17 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Globe, Wifi, Cpu, ShieldCheck } from 'lucide-react';
-import { UserSettings, SystemLog } from '../types';
+import { motion } from 'motion/react';
+import { Globe, Wifi, Cpu } from 'lucide-react';
+import { UserSettings } from '../types';
 
 interface FuturisticClockProps {
   settings: UserSettings;
-  addLog: (module: 'SYS' | 'NET' | 'IO' | 'EXT', type: 'info' | 'success' | 'warning' | 'packet', message: string) => void;
+  addLog: (
+    module: 'SYS' | 'NET' | 'IO' | 'EXT',
+    type: 'info' | 'success' | 'warning' | 'packet',
+    message: string,
+  ) => void;
 }
 
 export default function FuturisticClock({ settings, addLog }: FuturisticClockProps) {
@@ -46,7 +50,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
             addLogRef.current(
               'NET',
               'packet',
-              `ICMP Echo Request: seq=${nextTime.getSeconds()} size=64 bytes rtt=${rndPing}ms`
+              `ICMP Echo Request: seq=${nextTime.getSeconds()} size=64 bytes rtt=${rndPing}ms`,
             );
           }
         }
@@ -70,12 +74,6 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   const formattedMins = rawMins.toString().padStart(2, '0');
   const formattedSecs = rawSecs.toString().padStart(2, '0');
   const period = hours >= 12 ? 'PM' : 'AM';
-
-  // Calculate HEX clock (e.g. #082735 representing #HHMMSS)
-  const hexHours = hours.toString(16).padStart(2, '0');
-  const hexMins = rawMins.toString(16).padStart(2, '0');
-  const hexSecs = rawSecs.toString(16).padStart(2, '0');
-  const generatedHex = `#${hexHours}${hexMins}${hexSecs}`.toUpperCase();
 
   // Generate binary clock grid (6 columns: 2 for hours, 2 for mins, 2 for secs)
   const toBinaryDigits = (val: number): string[][] => {
@@ -132,7 +130,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
       const elapsed = currentMin - startMin;
       const pct = (elapsed / totalShift) * 100;
       return `${(Math.round(pct * 10) / 10).toFixed(1)}% Active`;
-    } catch (e) {
+    } catch {
       return null;
     }
   };
@@ -140,12 +138,60 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   // Theme color styling mappings
   const getColorClasses = () => {
     switch (settings.themeId) {
-      case 'emerald': return { text: 'text-emerald-400', glow: 'shadow-emerald-500/10', border: 'border-emerald-500/20', bgGlow: 'from-emerald-500/5', accentBg: 'bg-emerald-500', accentText: 'text-emerald-300' };
-      case 'cyan': return { text: 'text-cyan-400', glow: 'shadow-cyan-500/10', border: 'border-cyan-500/20', bgGlow: 'from-cyan-500/5', accentBg: 'bg-cyan-500', accentText: 'text-cyan-300' };
-      case 'amber': return { text: 'text-amber-400', glow: 'shadow-amber-500/10', border: 'border-amber-500/20', bgGlow: 'from-amber-500/5', accentBg: 'bg-amber-500', accentText: 'text-amber-300' };
-      case 'purple': return { text: 'text-purple-400', glow: 'shadow-purple-500/10', border: 'border-purple-500/20', bgGlow: 'from-purple-500/5', accentBg: 'bg-purple-500', accentText: 'text-purple-300' };
-      case 'rose': return { text: 'text-rose-400', glow: 'shadow-rose-500/10', border: 'border-rose-500/20', bgGlow: 'from-rose-500/5', accentBg: 'bg-rose-500', accentText: 'text-rose-300' };
-      default: return { text: 'text-emerald-400', glow: 'shadow-emerald-500/10', border: 'border-emerald-500/20', bgGlow: 'from-emerald-500/5', accentBg: 'bg-emerald-500', accentText: 'text-emerald-300' };
+      case 'emerald':
+        return {
+          text: 'text-emerald-400',
+          glow: 'shadow-emerald-500/10',
+          border: 'border-emerald-500/20',
+          bgGlow: 'from-emerald-500/5',
+          accentBg: 'bg-emerald-500',
+          accentText: 'text-emerald-300',
+        };
+      case 'cyan':
+        return {
+          text: 'text-cyan-400',
+          glow: 'shadow-cyan-500/10',
+          border: 'border-cyan-500/20',
+          bgGlow: 'from-cyan-500/5',
+          accentBg: 'bg-cyan-500',
+          accentText: 'text-cyan-300',
+        };
+      case 'amber':
+        return {
+          text: 'text-amber-400',
+          glow: 'shadow-amber-500/10',
+          border: 'border-amber-500/20',
+          bgGlow: 'from-amber-500/5',
+          accentBg: 'bg-amber-500',
+          accentText: 'text-amber-300',
+        };
+      case 'purple':
+        return {
+          text: 'text-purple-400',
+          glow: 'shadow-purple-500/10',
+          border: 'border-purple-500/20',
+          bgGlow: 'from-purple-500/5',
+          accentBg: 'bg-purple-500',
+          accentText: 'text-purple-300',
+        };
+      case 'rose':
+        return {
+          text: 'text-rose-400',
+          glow: 'shadow-rose-500/10',
+          border: 'border-rose-500/20',
+          bgGlow: 'from-rose-500/5',
+          accentBg: 'bg-rose-500',
+          accentText: 'text-rose-300',
+        };
+      default:
+        return {
+          text: 'text-emerald-400',
+          glow: 'shadow-emerald-500/10',
+          border: 'border-emerald-500/20',
+          bgGlow: 'from-emerald-500/5',
+          accentBg: 'bg-emerald-500',
+          accentText: 'text-emerald-300',
+        };
     }
   };
 
@@ -153,29 +199,46 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
   const getThemeBorderColor = () => {
     switch (settings.themeId) {
-      case 'emerald': return 'border-emerald-500/50';
-      case 'cyan': return 'border-cyan-500/50';
-      case 'amber': return 'border-amber-500/50';
-      case 'purple': return 'border-purple-500/50';
-      case 'rose': return 'border-rose-500/50';
-      default: return 'border-cyan-500/50';
+      case 'emerald':
+        return 'border-emerald-500/50';
+      case 'cyan':
+        return 'border-cyan-500/50';
+      case 'amber':
+        return 'border-amber-500/50';
+      case 'purple':
+        return 'border-purple-500/50';
+      case 'rose':
+        return 'border-rose-500/50';
+      default:
+        return 'border-cyan-500/50';
     }
   };
 
   const themeCornerBorder = getThemeBorderColor();
 
   return (
-    <div className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-2 px-4" id="root-futuristic-clock-container">
+    <div
+      className="flex flex-col items-center select-none max-w-4xl w-full relative group mt-2 px-4"
+      id="root-futuristic-clock-container"
+    >
       {/* Decorative Outer Tech Frames from Elegant Dark guidelines */}
       <div className="absolute -inset-2 border border-neutral-800/20 rounded-xl pointer-events-none -z-10"></div>
-      <div className={`absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 ${themeCornerBorder} pointer-events-none -z-10`}></div>
-      <div className={`absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 ${themeCornerBorder} pointer-events-none -z-10`}></div>
+      <div
+        className={`absolute -top-2 -left-2 w-10 h-10 border-t-2 border-l-2 ${themeCornerBorder} pointer-events-none -z-10`}
+      ></div>
+      <div
+        className={`absolute -bottom-2 -right-2 w-10 h-10 border-b-2 border-r-2 ${themeCornerBorder} pointer-events-none -z-10`}
+      ></div>
 
       {/* Top micro coordinates strip */}
-      <div className="flex items-center space-x-5 text-xs font-mono text-neutral-400 tracking-wider mb-2 z-10" id="micro-coord-strip">
+      <div
+        className="flex items-center space-x-5 text-xs font-mono text-neutral-400 tracking-wider mb-2 z-10"
+        id="micro-coord-strip"
+      >
         <span className="flex items-center gap-1.5 font-semibold">
           <Globe className="w-3.5 h-3.5 text-neutral-500 animate-pulse" />
-          UTC {(time.getTimezoneOffset() / 60) * -1 > 0 ? '+' : ''}{(time.getTimezoneOffset() / 60) * -1}H
+          UTC {(time.getTimezoneOffset() / 60) * -1 > 0 ? '+' : ''}
+          {(time.getTimezoneOffset() / 60) * -1}H
         </span>
         <span className="text-neutral-800">|</span>
         <span className="flex items-center gap-1.5 font-semibold">
@@ -197,7 +260,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
       </div>
 
       {/* Main Glass Clock Face */}
-      <div 
+      <div
         className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border ${colors.border} bg-neutral-900/60 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
         id="clock-shield"
       >
@@ -209,15 +272,21 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
         <div className="absolute right-3 bottom-3 h-4 w-4 border-b-2 border-r-2 border-neutral-700/60" />
 
         {/* Dynamic Scanline background gradient */}
-        <div className={`absolute inset-0 bg-gradient-to-b ${colors.bgGlow} to-transparent pointer-events-none opacity-30`} />
+        <div
+          className={`absolute inset-0 bg-gradient-to-b ${colors.bgGlow} to-transparent pointer-events-none opacity-30`}
+        />
 
         {/* Date visual header */}
         <div className="text-xs sm:text-sm font-mono tracking-[0.3em] text-neutral-300 font-medium mb-2 z-10 flex flex-col items-center gap-1.5 animate-pulse">
           <div className="flex items-center gap-2">
             {formatFullDate()}
             <span className="flex h-2 w-2 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${colors.accentBg} opacity-75`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${colors.accentBg}`}></span>
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full ${colors.accentBg} opacity-75`}
+              ></span>
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${colors.accentBg}`}
+              ></span>
             </span>
           </div>
 
@@ -230,27 +299,36 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
         </div>
 
         {/* The Digital Clock Face */}
-        <div className="flex items-baseline font-mono z-10 select-none pb-1 relative" id="clock-timestamp-readout">
-          <span className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
+        <div
+          className="flex items-baseline font-mono z-10 select-none pb-1 relative"
+          id="clock-timestamp-readout"
+        >
+          <span
+            className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}
+          >
             {formattedHours}
           </span>
-          
-          <motion.span 
+
+          <motion.span
             animate={{ opacity: [1, 0, 1] }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
             className={`text-5xl sm:text-6xl md:text-7xl font-light text-neutral-400 mx-1.5 pb-1`}
           >
             :
           </motion.span>
-          
-          <span className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}>
+
+          <span
+            className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}
+          >
             {formattedMins}
           </span>
 
           {settings.showSeconds && (
             <>
               <span className="text-3xl sm:text-4xl font-light text-neutral-500 mx-1">:</span>
-              <span className={`text-3xl sm:text-4xl font-normal text-neutral-300 font-mono w-[1.25em] inline-block`}>
+              <span
+                className={`text-3xl sm:text-4xl font-normal text-neutral-300 font-mono w-[1.25em] inline-block`}
+              >
                 {formattedSecs}
               </span>
             </>
@@ -265,13 +343,14 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
         {/* Binary Clock Matrix or Hex Clock Overlay based on configs */}
         <div className="mt-2.5 w-full border-t border-neutral-800/60 pt-2 flex items-center justify-between z-10">
-          
           {/* Shift progress / status representation */}
           <div className="flex flex-col items-start font-mono text-[10px] tracking-wider text-neutral-400">
             {settings.showWorkProgress ? (
               <div className="flex flex-col items-start">
                 <span className="text-neutral-500 font-bold">SHIFT PROGRESS</span>
-                <span className={`${colors.text} font-bold font-mono text-xs sm:text-sm mt-0.5 animate-pulse`}>
+                <span
+                  className={`${colors.text} font-bold font-mono text-xs sm:text-sm mt-0.5 animate-pulse`}
+                >
                   {getShiftProgressText()}
                 </span>
               </div>
