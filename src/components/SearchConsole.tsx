@@ -3,98 +3,115 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Search, ChevronDown, Terminal, Sparkles } from 'lucide-react';
-import { SearchEngine, UserSettings } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Search, ChevronDown, Terminal, Sparkles } from "lucide-react";
+import { SearchEngine, UserSettings } from "../types";
+import {
+  BTN_HOVER,
+  BTN_TAP,
+  BTN_SPRING,
+  CARD_HOVER,
+  CARD_TAP,
+  CARD_SPRING,
+} from "../lib/motion";
 
 interface SearchConsoleProps {
   settings: UserSettings;
   updateSettings: (key: keyof UserSettings, value: any) => void;
   addLog: (
-    module: 'SYS' | 'NET' | 'IO' | 'EXT',
-    type: 'info' | 'success' | 'warning' | 'packet',
+    module: "SYS" | "NET" | "IO" | "EXT",
+    type: "info" | "success" | "warning" | "packet",
     message: string,
   ) => void;
 }
 
 const SEARCH_ENGINES: SearchEngine[] = [
   {
-    id: 'google',
-    name: 'Google',
-    url: 'https://www.google.com/search?q=',
-    placeholder: 'Search the Web via Secure Index...',
-    shortcut: '/g',
-    icon: 'search',
+    id: "google",
+    name: "Google",
+    url: "https://www.google.com/search?q=",
+    placeholder: "Search the Web via Secure Index...",
+    shortcut: "/g",
+    icon: "search",
   },
   {
-    id: 'duckduckgo',
-    name: 'DuckDuckGo',
-    url: 'https://duckduckgo.com/?q=',
-    placeholder: 'Query encrypted index tracker-free...',
-    shortcut: '/d',
-    icon: 'shield',
+    id: "duckduckgo",
+    name: "DuckDuckGo",
+    url: "https://duckduckgo.com/?q=",
+    placeholder: "Query encrypted index tracker-free...",
+    shortcut: "/d",
+    icon: "shield",
   },
   {
-    id: 'github',
-    name: 'GitHub',
-    url: 'https://github.com/search?q=',
-    placeholder: 'Scan repository nodes and codes...',
-    shortcut: '/git',
-    icon: 'github',
+    id: "github",
+    name: "GitHub",
+    url: "https://github.com/search?q=",
+    placeholder: "Scan repository nodes and codes...",
+    shortcut: "/git",
+    icon: "github",
   },
   {
-    id: 'youtube',
-    name: 'YouTube',
-    url: 'https://www.youtube.com/results?search_query=',
-    placeholder: 'Query decentral video payload streams...',
-    shortcut: '/yt',
-    icon: 'video',
+    id: "youtube",
+    name: "YouTube",
+    url: "https://www.youtube.com/results?search_query=",
+    placeholder: "Query decentral video payload streams...",
+    shortcut: "/yt",
+    icon: "video",
   },
   {
-    id: 'wikipedia',
-    name: 'Wikipedia',
-    url: 'https://en.wikipedia.org/wiki/Special:Search?search=',
-    placeholder: 'Query mainframe archive database...',
-    shortcut: '/w',
-    icon: 'book',
+    id: "wikipedia",
+    name: "Wikipedia",
+    url: "https://en.wikipedia.org/wiki/Special:Search?search=",
+    placeholder: "Query mainframe archive database...",
+    shortcut: "/w",
+    icon: "book",
   },
 ];
 
 const AI_PORTALS = [
   {
-    id: 'gemini',
-    name: 'Gemini',
-    url: 'https://gemini.google.com',
-    desc: 'Google Synapse',
-    tag: 'v1.5_PRO',
+    id: "gemini",
+    name: "Gemini",
+    url: "https://gemini.google.com",
+    desc: "Google Synapse",
+    tag: "v1.5_PRO",
   },
   {
-    id: 'chatgpt',
-    name: 'ChatGPT',
-    url: 'https://chatgpt.com',
-    desc: 'OpenAI Core',
-    tag: 'GPT-4o',
+    id: "chatgpt",
+    name: "ChatGPT",
+    url: "https://chatgpt.com",
+    desc: "OpenAI Core",
+    tag: "GPT-4o",
   },
   {
-    id: 'claude',
-    name: 'Claude',
-    url: 'https://claude.ai',
-    desc: 'Anthropic Hub',
-    tag: 'v3.5_SON',
+    id: "claude",
+    name: "Claude",
+    url: "https://claude.ai",
+    desc: "Anthropic Hub",
+    tag: "v3.5_SON",
   },
   {
-    id: 'qwen',
-    name: 'Qwen',
-    url: 'https://chat.qwenlm.ai',
-    desc: 'Neural Matrix',
-    tag: 'v2.5_MAX',
+    id: "qwen",
+    name: "Qwen",
+    url: "https://chat.qwenlm.ai",
+    desc: "Neural Matrix",
+    tag: "v2.5_MAX",
   },
 ];
 
-export default function SearchConsole({ settings, updateSettings, addLog }: SearchConsoleProps) {
-  const [query, setQuery] = useState('');
-  const [activeEngine, setActiveEngine] = useState<SearchEngine>(SEARCH_ENGINES[0]);
+export default function SearchConsole({
+  settings,
+  updateSettings,
+  addLog,
+}: SearchConsoleProps) {
+  const [query, setQuery] = useState("");
+  const activeEngine = useMemo(
+    () =>
+      SEARCH_ENGINES.find((e) => e.id === settings.searchEngineId) ??
+      SEARCH_ENGINES[1],
+    [settings.searchEngineId],
+  );
   const [isFocused, setIsFocused] = useState(false);
   const [isEngineMenuOpen, setIsEngineMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -104,21 +121,16 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
   useEffect(() => {
     if (!isEngineMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (engineMenuRef.current && !engineMenuRef.current.contains(e.target as Node)) {
+      if (
+        engineMenuRef.current &&
+        !engineMenuRef.current.contains(e.target as Node)
+      ) {
         setIsEngineMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isEngineMenuOpen]);
-
-  // Sync active engine with settings
-  useEffect(() => {
-    const matched = SEARCH_ENGINES.find((e) => e.id === settings.searchEngineId);
-    if (matched) {
-      setActiveEngine(matched);
-    }
-  }, [settings.searchEngineId]);
 
   // Autofocus the search bar on load, as expected of a new-tab page
   useEffect(() => {
@@ -133,10 +145,13 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
     // Look for matching engine shortcut prefixes (e.g. "/g ")
     for (const engine of SEARCH_ENGINES) {
       if (val.startsWith(`${engine.shortcut} `)) {
-        setActiveEngine(engine);
-        updateSettings('searchEngineId', engine.id);
+        updateSettings("searchEngineId", engine.id);
         setQuery(val.substring(engine.shortcut.length + 1));
-        addLog('SYS', 'success', `Active routing engine switched to ${engine.name} via shortcut`);
+        addLog(
+          "SYS",
+          "success",
+          `Active routing engine switched to ${engine.name} via shortcut`,
+        );
         break;
       }
     }
@@ -148,8 +163,8 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
 
     const trimmedQuery = query.trim();
     addLog(
-      'NET',
-      'success',
+      "NET",
+      "success",
       `Search transmission initialized: engine=${activeEngine.name} payload="${trimmedQuery}"`,
     );
 
@@ -157,10 +172,19 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
     let targetUrl = activeEngine.url + encodeURIComponent(trimmedQuery);
 
     // Check if the query itself is a valid looking URL - if so we can offer to navigate directly!
-    const isUrl = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/.test(trimmedQuery);
+    const isUrl =
+      /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/.test(
+        trimmedQuery,
+      );
     if (isUrl) {
-      targetUrl = trimmedQuery.startsWith('http') ? trimmedQuery : `https://${trimmedQuery}`;
-      addLog('NET', 'info', `Direct routing detected. Navigating directly to node: ${targetUrl}`);
+      targetUrl = trimmedQuery.startsWith("http")
+        ? trimmedQuery
+        : `https://${trimmedQuery}`;
+      addLog(
+        "NET",
+        "info",
+        `Direct routing detected. Navigating directly to node: ${targetUrl}`,
+      );
     }
 
     setTimeout(() => {
@@ -169,44 +193,43 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
   };
 
   const selectEngine = (engine: SearchEngine) => {
-    setActiveEngine(engine);
-    updateSettings('searchEngineId', engine.id);
-    addLog('SYS', 'info', `Routing engine changed manually: ${engine.name}`);
+    updateSettings("searchEngineId", engine.id);
+    addLog("SYS", "info", `Routing engine changed manually: ${engine.name}`);
     setIsEngineMenuOpen(false);
     inputRef.current?.focus();
   };
 
   const getThemeColor = () => {
     switch (settings.themeId) {
-      case 'emerald':
-        return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
-      case 'cyan':
-        return 'text-cyan-400 border-cyan-500/20 shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20';
-      case 'amber':
-        return 'text-amber-400 border-amber-500/20 shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20';
-      case 'purple':
-        return 'text-purple-400 border-purple-500/20 shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20';
-      case 'rose':
-        return 'text-rose-400 border-rose-500/20 shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20';
+      case "emerald":
+        return "text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
+      case "cyan":
+        return "text-cyan-400 border-cyan-500/20 shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20";
+      case "amber":
+        return "text-amber-400 border-amber-500/20 shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20";
+      case "purple":
+        return "text-purple-400 border-purple-500/20 shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20";
+      case "rose":
+        return "text-rose-400 border-rose-500/20 shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20";
       default:
-        return 'text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20';
+        return "text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
     }
   };
 
   const getThemeAccentColor = () => {
     switch (settings.themeId) {
-      case 'emerald':
-        return '#34d399';
-      case 'cyan':
-        return '#22d3ee';
-      case 'amber':
-        return '#fbbf24';
-      case 'purple':
-        return '#c084fc';
-      case 'rose':
-        return '#fb7185';
+      case "emerald":
+        return "#34d399";
+      case "cyan":
+        return "#22d3ee";
+      case "amber":
+        return "#fbbf24";
+      case "purple":
+        return "#c084fc";
+      case "rose":
+        return "#fb7185";
       default:
-        return '#34d399';
+        return "#34d399";
     }
   };
 
@@ -231,7 +254,10 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
         }
       >
         <div className="relative shrink-0" ref={engineMenuRef}>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.95 }}
+            transition={BTN_SPRING}
             type="button"
             onClick={() => setIsEngineMenuOpen((prev) => !prev)}
             aria-label={`Change search engine (currently ${activeEngine.name})`}
@@ -243,9 +269,9 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
               {activeEngine.name.substring(0, 3)}:
             </span>
             <ChevronDown
-              className={`w-3 h-3 ml-0.5 text-neutral-600 transition-transform ${isEngineMenuOpen ? 'rotate-180' : ''}`}
+              className={`w-3 h-3 ml-0.5 text-neutral-600 transition-transform ${isEngineMenuOpen ? "rotate-180" : ""}`}
             />
-          </button>
+          </motion.button>
 
           <AnimatePresence>
             {isEngineMenuOpen && (
@@ -257,21 +283,24 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
                 id="search-engine-picker-menu"
               >
                 {SEARCH_ENGINES.map((engine) => (
-                  <button
+                  <motion.button
                     key={engine.id}
+                    whileHover={{ scale: 1.03, x: 3 }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={BTN_SPRING}
                     type="button"
                     onClick={() => selectEngine(engine)}
-                    className={`w-full text-left px-3 py-2 text-xs uppercase tracking-wide transition-all cursor-pointer flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-2 text-xs uppercase tracking-wide transition-colors cursor-pointer flex items-center justify-between ${
                       engine.id === activeEngine.id
-                        ? 'bg-neutral-900 text-white font-bold'
-                        : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200'
+                        ? "bg-neutral-900 text-white font-bold"
+                        : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                     }`}
                   >
                     {engine.name}
                     <span className="text-neutral-600 text-[10px] normal-case">
                       {engine.shortcut}
                     </span>
-                  </button>
+                  </motion.button>
                 ))}
               </motion.div>
             )}
@@ -290,16 +319,19 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
           id="search-input"
         />
 
-        <button
+        <motion.button
+          whileHover={BTN_HOVER}
+          whileTap={BTN_TAP}
+          transition={BTN_SPRING}
           type="submit"
-          className="p-1.5 px-3 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-75 w-fit text-neutral-350 hover:text-white transition-all flex items-center gap-2 cursor-pointer"
+          className="p-1.5 px-3 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-75 w-fit text-neutral-350 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
           id="search-trigger-btn"
         >
           <Search className="w-4 h-4 text-neutral-300" />
           <span className="text-xs font-mono uppercase tracking-wider hidden sm:inline-block">
             EXEC
           </span>
-        </button>
+        </motion.button>
       </form>
 
       {/* Dedicated Pinned AI Infrastructure Sections */}
@@ -309,29 +341,37 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
       >
         {AI_PORTALS.map((portal) => {
           return (
-            <a
+            <motion.a
               key={portal.id}
+              whileHover={{ ...CARD_HOVER, transition: CARD_SPRING }}
+              whileTap={{ ...CARD_TAP, transition: CARD_SPRING }}
               href={portal.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() =>
                 addLog(
-                  'EXT',
-                  'info',
+                  "EXT",
+                  "info",
                   `Direct linkage: Routed telemetry query to ${portal.name} node`,
                 )
               }
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                e.currentTarget.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
-                e.currentTarget.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+                e.currentTarget.style.setProperty(
+                  "--mouse-x",
+                  `${e.clientX - rect.left}px`,
+                );
+                e.currentTarget.style.setProperty(
+                  "--mouse-y",
+                  `${e.clientY - rect.top}px`,
+                );
               }}
-              className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-all duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
+              className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-colors duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
               style={
                 {
-                  '--hover-glow': accentColor,
-                  '--mouse-x': '50%',
-                  '--mouse-y': '50%',
+                  "--hover-glow": accentColor,
+                  "--mouse-x": "50%",
+                  "--mouse-y": "50%",
                 } as React.CSSProperties
               }
             >
@@ -378,7 +418,7 @@ export default function SearchConsole({ settings, updateSettings, addLog }: Sear
                   LINK
                 </span>
               </div>
-            </a>
+            </motion.a>
           );
         })}
       </div>

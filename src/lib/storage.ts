@@ -10,10 +10,10 @@
 
 export function isSyncAvailable(): boolean {
   return (
-    typeof chrome !== 'undefined' &&
+    typeof chrome !== "undefined" &&
     !!chrome.storage &&
     !!chrome.storage.sync &&
-    typeof chrome.runtime !== 'undefined' &&
+    typeof chrome.runtime !== "undefined" &&
     !!chrome.runtime.id
   );
 }
@@ -64,7 +64,10 @@ export function write(key: string, value: unknown): void {
       chrome.storage.sync.set({ [key]: value }, () => {
         if (chrome.runtime.lastError) {
           // Likely QUOTA_BYTES_PER_ITEM exceeded — the local copy above still holds.
-          console.warn(`Sync write skipped for "${key}":`, chrome.runtime.lastError.message);
+          console.warn(
+            `Sync write skipped for "${key}":`,
+            chrome.runtime.lastError.message,
+          );
         }
       });
     } catch {

@@ -12,7 +12,9 @@ declare namespace chrome.system.network {
     prefixLength: number;
   }
 
-  function getNetworkInterfaces(callback: (interfaces: NetworkInterface[]) => void): void;
+  function getNetworkInterfaces(
+    callback: (interfaces: NetworkInterface[]) => void,
+  ): void;
 
   const onNetworkLinkChanged: {
     addListener(callback: () => void): void;

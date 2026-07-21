@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Plus,
   X,
@@ -15,16 +15,26 @@ import {
   Globe,
   Globe2,
   GripVertical,
-} from 'lucide-react';
-import { PinnedSite, UserSettings } from '../types';
+} from "lucide-react";
+import { PinnedSite, UserSettings } from "../types";
+import {
+  BTN_HOVER,
+  BTN_TAP,
+  BTN_SPRING,
+  CARD_HOVER,
+  CARD_TAP,
+  CARD_SPRING,
+} from "../lib/motion";
 
 // Free, no-key-required favicon lookup service — used for the "Site Favicon" icon option.
 const getFaviconUrl = (rawUrl: string): string => {
   try {
-    const parsed = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
+    const parsed = new URL(
+      rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`,
+    );
     return `https://www.google.com/s2/favicons?sz=64&domain=${parsed.hostname}`;
   } catch {
-    return '';
+    return "";
   }
 };
 
@@ -33,7 +43,11 @@ function SiteFavicon({ site }: { site: PinnedSite }) {
   const [failed, setFailed] = useState(false);
 
   if (failed || !site.iconValue) {
-    return <span className="text-xs">{site.title.substring(0, 2).toUpperCase()}</span>;
+    return (
+      <span className="text-xs">
+        {site.title.substring(0, 2).toUpperCase()}
+      </span>
+    );
   }
 
   return (
@@ -49,14 +63,14 @@ function SiteFavicon({ site }: { site: PinnedSite }) {
 interface PinnedSitesProps {
   settings: UserSettings;
   pinnedSites: PinnedSite[];
-  onAddSite: (site: Omit<PinnedSite, 'id' | 'visitCount'>) => void;
+  onAddSite: (site: Omit<PinnedSite, "id" | "visitCount">) => void;
   onEditSite: (site: PinnedSite) => void;
   onDeleteSite: (id: string) => void;
   onUpdateSiteVisits: (id: string) => void;
   onReorderSites: (sites: PinnedSite[]) => void;
   addLog: (
-    module: 'SYS' | 'NET' | 'IO' | 'EXT',
-    type: 'info' | 'success' | 'warning' | 'packet',
+    module: "SYS" | "NET" | "IO" | "EXT",
+    type: "info" | "success" | "warning" | "packet",
     message: string,
   ) => void;
 }
@@ -74,30 +88,37 @@ export default function PinnedSites({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<PinnedSite | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const confirmDeleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmDeleteTimerRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const requestDelete = (site: PinnedSite) => {
     if (confirmDeleteId === site.id) {
-      if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
+      if (confirmDeleteTimerRef.current)
+        clearTimeout(confirmDeleteTimerRef.current);
       setConfirmDeleteId(null);
       onDeleteSite(site.id);
       return;
     }
     setConfirmDeleteId(site.id);
-    if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
-    confirmDeleteTimerRef.current = setTimeout(() => setConfirmDeleteId(null), 3000);
+    if (confirmDeleteTimerRef.current)
+      clearTimeout(confirmDeleteTimerRef.current);
+    confirmDeleteTimerRef.current = setTimeout(
+      () => setConfirmDeleteId(null),
+      3000,
+    );
   };
 
   const [isManualGrid, setIsManualGrid] = useState(() => {
     try {
-      return localStorage.getItem('netgrid_manual_grid') === 'true';
+      return localStorage.getItem("netgrid_manual_grid") === "true";
     } catch {
       return false;
     }
   });
 
   React.useEffect(() => {
-    localStorage.setItem('netgrid_manual_grid', String(isManualGrid));
+    localStorage.setItem("netgrid_manual_grid", String(isManualGrid));
   }, [isManualGrid]);
 
   // Ensure every site has a unique position
@@ -125,7 +146,10 @@ export default function PinnedSites({
 
   // Calculate grid dimensions (full rows of 8, minimum 16)
   const totalSlotsCount = React.useMemo(() => {
-    const maxPos = sitesWithPositions.reduce((max, s) => Math.max(max, s.position ?? 0), 0);
+    const maxPos = sitesWithPositions.reduce(
+      (max, s) => Math.max(max, s.position ?? 0),
+      0,
+    );
     const count = Math.max(16, maxPos + 1);
     return Math.ceil(count / 8) * 8;
   }, [sitesWithPositions]);
@@ -136,18 +160,24 @@ export default function PinnedSites({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   // Form State
-  const [title, setTitle] = useState('');
-  const [url, setUrl] = useState('');
-  const [iconType, setIconType] = useState<'initials' | 'icon' | 'custom'>('initials');
-  const [iconValue, setIconValue] = useState('');
-  const [category, setCategory] = useState('');
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [iconType, setIconType] = useState<"initials" | "icon" | "custom">(
+    "initials",
+  );
+  const [iconValue, setIconValue] = useState("");
+  const [category, setCategory] = useState("");
 
   const handleDragStart = (e: React.DragEvent, positionIndex: number) => {
     setDraggedIdx(positionIndex);
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = "move";
     const site = sitesWithPositions.find((s) => s.position === positionIndex);
     if (site) {
-      addLog('SYS', 'info', `Initiated rearrange calibration on node [${site.title}]`);
+      addLog(
+        "SYS",
+        "info",
+        `Initiated rearrange calibration on node [${site.title}]`,
+      );
     }
   };
 
@@ -161,8 +191,12 @@ export default function PinnedSites({
     e.preventDefault();
     if (draggedIdx === null || draggedIdx === targetPosition) return;
 
-    const sourceSite = sitesWithPositions.find((s) => s.position === draggedIdx);
-    const targetSite = sitesWithPositions.find((s) => s.position === targetPosition);
+    const sourceSite = sitesWithPositions.find(
+      (s) => s.position === draggedIdx,
+    );
+    const targetSite = sitesWithPositions.find(
+      (s) => s.position === targetPosition,
+    );
 
     if (sourceSite) {
       const updated = sitesWithPositions.map((s) => {
@@ -176,8 +210,8 @@ export default function PinnedSites({
       });
       onReorderSites(updated);
       addLog(
-        'SYS',
-        'success',
+        "SYS",
+        "success",
         `Configuration path routed: Moved '${sourceSite.title}' to slot ${targetPosition + 1}`,
       );
     }
@@ -198,25 +232,28 @@ export default function PinnedSites({
     const targetPosition = currentPosition + direction;
     if (targetPosition < 0) return;
 
-    const targetSite = sitesWithPositions.find((s) => s.position === targetPosition);
+    const targetSite = sitesWithPositions.find(
+      (s) => s.position === targetPosition,
+    );
     const updated = sitesWithPositions.map((s) => {
       if (s.id === site.id) return { ...s, position: targetPosition };
-      if (targetSite && s.id === targetSite.id) return { ...s, position: currentPosition };
+      if (targetSite && s.id === targetSite.id)
+        return { ...s, position: currentPosition };
       return s;
     });
     onReorderSites(updated);
     addLog(
-      'SYS',
-      'success',
+      "SYS",
+      "success",
       `Configuration path routed: Moved '${site.title}' to slot ${targetPosition + 1}`,
     );
   };
 
   const handleGripKeyDown = (e: React.KeyboardEvent, site: PinnedSite) => {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
       e.preventDefault();
       moveByKeyboard(site, -1);
-    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
       e.preventDefault();
       moveByKeyboard(site, 1);
     }
@@ -224,13 +261,13 @@ export default function PinnedSites({
 
   const openAddModal = () => {
     setEditingSite(null);
-    setTitle('');
-    setUrl('');
-    setIconType('initials');
-    setIconValue('');
-    setCategory('');
+    setTitle("");
+    setUrl("");
+    setIconType("initials");
+    setIconValue("");
+    setCategory("");
     setIsModalOpen(true);
-    addLog('SYS', 'info', 'Console opened for registering connection endpoint');
+    addLog("SYS", "info", "Console opened for registering connection endpoint");
   };
 
   const openEditModal = (site: PinnedSite) => {
@@ -239,9 +276,13 @@ export default function PinnedSites({
     setUrl(site.url);
     setIconType(site.iconType);
     setIconValue(site.iconValue);
-    setCategory(site.category || '');
+    setCategory(site.category || "");
     setIsModalOpen(true);
-    addLog('SYS', 'info', `Configuration module accessed for endpoint: ${site.title}`);
+    addLog(
+      "SYS",
+      "info",
+      `Configuration module accessed for endpoint: ${site.title}`,
+    );
   };
 
   const closeModal = () => {
@@ -253,11 +294,11 @@ export default function PinnedSites({
     // Automatically extract initials if field is empty
     if (!title && url) {
       try {
-        const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
-        const parts = parsed.hostname.replace('www.', '').split('.');
+        const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+        const parts = parsed.hostname.replace("www.", "").split(".");
         const namePart = parts[0];
         setTitle(namePart.charAt(0).toUpperCase() + namePart.slice(1));
-        if (iconType === 'initials' && !iconValue) {
+        if (iconType === "initials" && !iconValue) {
           setIconValue(namePart.substring(0, 2).toUpperCase());
         }
       } catch {
@@ -277,7 +318,7 @@ export default function PinnedSites({
     }
 
     const valueOfIcon =
-      iconType === 'custom'
+      iconType === "custom"
         ? getFaviconUrl(formattedUrl) || iconValue.trim()
         : iconValue.trim() || title.substring(0, 2).toUpperCase();
 
@@ -290,7 +331,11 @@ export default function PinnedSites({
         iconValue: valueOfIcon,
         category: category.trim() || undefined,
       });
-      addLog('IO', 'success', `Bookmark endpoint calibrated and saved: ${title}`);
+      addLog(
+        "IO",
+        "success",
+        `Bookmark endpoint calibrated and saved: ${title}`,
+      );
     } else {
       onAddSite({
         title: title.trim(),
@@ -299,7 +344,7 @@ export default function PinnedSites({
         iconValue: valueOfIcon,
         category: category.trim() || undefined,
       });
-      addLog('IO', 'success', `New bookmark registered: ${title}`);
+      addLog("IO", "success", `New bookmark registered: ${title}`);
     }
 
     closeModal();
@@ -307,7 +352,11 @@ export default function PinnedSites({
 
   const handleCardClick = (id: string, url: string) => {
     onUpdateSiteVisits(id);
-    addLog('NET', 'packet', `Socket stream forwarding: routing client interface -> ${url}`);
+    addLog(
+      "NET",
+      "packet",
+      `Socket stream forwarding: routing client interface -> ${url}`,
+    );
 
     // Smooth delay for log visualization then redirect
     setTimeout(() => {
@@ -318,68 +367,68 @@ export default function PinnedSites({
   const handleCardMiddleClick = (id: string, url: string) => {
     onUpdateSiteVisits(id);
     addLog(
-      'NET',
-      'packet',
+      "NET",
+      "packet",
       `Socket stream forwarding: routing client interface (new tab) -> ${url}`,
     );
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const getThemeColors = () => {
     switch (settings.themeId) {
-      case 'emerald':
+      case "emerald":
         return {
-          text: 'text-emerald-400',
-          border: 'border-emerald-500/20',
-          hoverBorder: 'group-hover:border-emerald-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]',
-          glowRGB: '52, 211, 153',
-          modalBtn: 'bg-emerald-500 hover:bg-emerald-600',
+          text: "text-emerald-400",
+          border: "border-emerald-500/20",
+          hoverBorder: "group-hover:border-emerald-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]",
+          glowRGB: "52, 211, 153",
+          modalBtn: "bg-emerald-500 hover:bg-emerald-600",
         };
-      case 'cyan':
+      case "cyan":
         return {
-          text: 'text-cyan-400',
-          border: 'border-cyan-500/20',
-          hoverBorder: 'group-hover:border-cyan-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(34,211,238,0.3)]',
-          glowRGB: '34, 211, 238',
-          modalBtn: 'bg-cyan-500 hover:bg-cyan-600',
+          text: "text-cyan-400",
+          border: "border-cyan-500/20",
+          hoverBorder: "group-hover:border-cyan-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(34,211,238,0.3)]",
+          glowRGB: "34, 211, 238",
+          modalBtn: "bg-cyan-500 hover:bg-cyan-600",
         };
-      case 'amber':
+      case "amber":
         return {
-          text: 'text-amber-400',
-          border: 'border-amber-500/20',
-          hoverBorder: 'group-hover:border-amber-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]',
-          glowRGB: '251, 191, 36',
-          modalBtn: 'bg-amber-500 hover:bg-amber-600',
+          text: "text-amber-400",
+          border: "border-amber-500/20",
+          hoverBorder: "group-hover:border-amber-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]",
+          glowRGB: "251, 191, 36",
+          modalBtn: "bg-amber-500 hover:bg-amber-600",
         };
-      case 'purple':
+      case "purple":
         return {
-          text: 'text-purple-400',
-          border: 'border-purple-500/20',
-          hoverBorder: 'group-hover:border-purple-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(192,132,252,0.3)]',
-          glowRGB: '192, 132, 252',
-          modalBtn: 'bg-purple-500 hover:bg-purple-600',
+          text: "text-purple-400",
+          border: "border-purple-500/20",
+          hoverBorder: "group-hover:border-purple-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(192,132,252,0.3)]",
+          glowRGB: "192, 132, 252",
+          modalBtn: "bg-purple-500 hover:bg-purple-600",
         };
-      case 'rose':
+      case "rose":
         return {
-          text: 'text-rose-400',
-          border: 'border-rose-500/20',
-          hoverBorder: 'group-hover:border-rose-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(251,113,133,0.3)]',
-          glowRGB: '251, 113, 133',
-          modalBtn: 'bg-rose-500 hover:bg-rose-600',
+          text: "text-rose-400",
+          border: "border-rose-500/20",
+          hoverBorder: "group-hover:border-rose-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(251,113,133,0.3)]",
+          glowRGB: "251, 113, 133",
+          modalBtn: "bg-rose-500 hover:bg-rose-600",
         };
       default:
         return {
-          text: 'text-emerald-400',
-          border: 'border-emerald-500/20',
-          hoverBorder: 'group-hover:border-emerald-400/50',
-          iconGlow: 'group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]',
-          glowRGB: '52, 211, 153',
-          modalBtn: 'bg-emerald-500 hover:bg-emerald-600',
+          text: "text-emerald-400",
+          border: "border-emerald-500/20",
+          hoverBorder: "group-hover:border-emerald-400/50",
+          iconGlow: "group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]",
+          glowRGB: "52, 211, 153",
+          modalBtn: "bg-emerald-500 hover:bg-emerald-600",
         };
     }
   };
@@ -397,46 +446,53 @@ export default function PinnedSites({
           <div className="h-px flex-grow bg-neutral-800/40"></div>
           <div className="text-[11px] uppercase tracking-[0.3em] text-neutral-400 font-mono flex items-center gap-2">
             <LayoutGrid className={`w-3.5 h-3.5 ${colors.text}`} />
-            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [DRAG OR ARROW KEYS TO REARRANGE]
+            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [DRAG OR ARROW KEYS
+            TO REARRANGE]
           </div>
           <div className="h-px flex-grow bg-neutral-800/40 font-mono"></div>
 
           {/* Manual Grid Toggle Button */}
-          <button
+          <motion.button
+            whileHover={BTN_HOVER}
+            whileTap={BTN_TAP}
+            transition={BTN_SPRING}
             onClick={() => setIsManualGrid(!isManualGrid)}
-            className={`flex items-center gap-1.5 border font-mono text-[10px] uppercase py-1 px-3 rounded transition-all duration-300 cursor-pointer ${
+            className={`flex items-center gap-1.5 border font-mono text-[10px] uppercase py-1 px-3 rounded transition-colors duration-300 cursor-pointer ${
               isManualGrid
-                ? 'bg-neutral-900 text-white shadow-md'
-                : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-300 hover:border-neutral-700'
+                ? "bg-neutral-900 text-white shadow-md"
+                : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-300 hover:border-neutral-700"
             }`}
             style={
               isManualGrid
                 ? {
-                    borderColor: colors.text.includes('emerald')
-                      ? '#34d399'
-                      : colors.text.includes('cyan')
-                        ? '#22d3ee'
-                        : colors.text.includes('amber')
-                          ? '#fbbf24'
-                          : colors.text.includes('purple')
-                            ? '#c084fc'
-                            : '#fb7185',
+                    borderColor: colors.text.includes("emerald")
+                      ? "#34d399"
+                      : colors.text.includes("cyan")
+                        ? "#22d3ee"
+                        : colors.text.includes("amber")
+                          ? "#fbbf24"
+                          : colors.text.includes("purple")
+                            ? "#c084fc"
+                            : "#fb7185",
                   }
                 : undefined
             }
           >
             <LayoutGrid className="w-3.5 h-3.5" />
-            {isManualGrid ? 'Grid Mode: ON' : 'Manual Grid'}
-          </button>
+            {isManualGrid ? "Grid Mode: ON" : "Manual Grid"}
+          </motion.button>
 
-          <button
+          <motion.button
+            whileHover={BTN_HOVER}
+            whileTap={BTN_TAP}
+            transition={BTN_SPRING}
             onClick={openAddModal}
-            className="flex items-center gap-1.5 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-mono text-[10px] uppercase py-1 px-3 rounded transition-all duration-300 cursor-pointer"
+            className="flex items-center gap-1.5 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-mono text-[10px] uppercase py-1 px-3 rounded transition-colors duration-300 cursor-pointer"
             id="pin-site-add-btn"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Node
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -460,15 +516,15 @@ export default function PinnedSites({
                 className={`relative h-[110px] w-full p-3 rounded-xl border border-dashed backdrop-blur-sm transition-all duration-300 flex flex-col items-center justify-center font-mono select-none ${
                   isDraggingActive
                     ? isHoveredSlot
-                      ? 'border-neutral-400 bg-neutral-900/30 scale-102'
-                      : 'border-neutral-800 bg-neutral-950/10'
-                    : 'border-transparent bg-transparent'
+                      ? "border-neutral-400 bg-neutral-900/30 scale-102"
+                      : "border-neutral-800 bg-neutral-950/10"
+                    : "border-transparent bg-transparent"
                 }`}
               >
                 {isDraggingActive && (
                   <>
                     <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
-                      Slot {String(posIndex + 1).padStart(2, '0')}
+                      Slot {String(posIndex + 1).padStart(2, "0")}
                     </span>
                     <span className="text-[8.5px] text-neutral-600 mt-1 uppercase tracking-widest">
                       Empty Node
@@ -479,7 +535,7 @@ export default function PinnedSites({
             );
           }
 
-          const simPort = site.url.includes('https') ? 443 : 80;
+          const simPort = site.url.includes("https") ? 443 : 80;
           const simIndex = posIndex + 1;
           const isDraggedIdx = draggedIdx === posIndex;
           const isHoveredIdx = hoveredDragIdx === posIndex;
@@ -488,8 +544,21 @@ export default function PinnedSites({
             <motion.div
               key={site.id}
               initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: isDraggedIdx ? 0.35 : 1, y: 0 }}
-              transition={{ delay: index * 0.02 }}
+              animate={{
+                opacity: isDraggedIdx ? 0.35 : 1,
+                y: 0,
+                transition: { delay: index * 0.02 },
+              }}
+              whileHover={
+                isDraggedIdx
+                  ? undefined
+                  : { ...CARD_HOVER, transition: CARD_SPRING }
+              }
+              whileTap={
+                isDraggedIdx
+                  ? undefined
+                  : { ...CARD_TAP, transition: CARD_SPRING }
+              }
               className="group relative bookmark-tile-node"
               draggable={activeDragId === site.id}
               onDragStart={(e) => handleDragStart(e, posIndex)}
@@ -514,7 +583,7 @@ export default function PinnedSites({
               <div
                 className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-950/40 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
                   isDraggedIdx
-                    ? 'border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80'
+                    ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80"
                     : isHoveredIdx
                       ? `border-neutral-500 scale-102 bg-neutral-900/40 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
                       : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/10`
@@ -541,17 +610,23 @@ export default function PinnedSites({
 
                   {/* Settings dropdown / option buttons for modifying bookmarks */}
                   <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.2 }}
+                      whileTap={{ scale: 0.85 }}
+                      transition={BTN_SPRING}
                       onClick={(e) => {
                         e.stopPropagation();
                         openEditModal(site);
                       }}
                       aria-label={`Edit ${site.title}`}
-                      className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-all cursor-pointer"
+                      className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
                     >
                       <Edit2 className="w-3 h-3" />
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.2 }}
+                      whileTap={{ scale: 0.85 }}
+                      transition={BTN_SPRING}
                       onClick={(e) => {
                         e.stopPropagation();
                         requestDelete(site);
@@ -561,15 +636,19 @@ export default function PinnedSites({
                           ? `Confirm delete ${site.title}`
                           : `Delete ${site.title}`
                       }
-                      title={confirmDeleteId === site.id ? 'Click again to confirm' : undefined}
-                      className={`p-1 rounded transition-all cursor-pointer ${
+                      title={
                         confirmDeleteId === site.id
-                          ? 'bg-rose-950 text-rose-400 animate-pulse'
-                          : 'hover:bg-rose-950 text-neutral-400 hover:text-rose-400'
+                          ? "Click again to confirm"
+                          : undefined
+                      }
+                      className={`p-1 rounded transition-colors cursor-pointer ${
+                        confirmDeleteId === site.id
+                          ? "bg-rose-950 text-rose-400 animate-pulse"
+                          : "hover:bg-rose-950 text-neutral-400 hover:text-rose-400"
                       }`}
                     >
                       <Trash2 className="w-3 h-3" />
-                    </button>
+                    </motion.button>
                   </div>
                 </div>
 
@@ -578,11 +657,11 @@ export default function PinnedSites({
                   <div
                     className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-lg border border-neutral-800/60 bg-neutral-900/50 text-sm font-semibold font-mono tracking-wider text-neutral-300 group-hover:text-white group-hover:border-neutral-700 select-none group-shadow transition-all overflow-hidden ${colors.iconGlow}`}
                   >
-                    {site.iconType === 'initials' && site.iconValue}
-                    {site.iconType === 'icon' && (
+                    {site.iconType === "initials" && site.iconValue}
+                    {site.iconType === "icon" && (
                       <Globe className="w-4.5 h-4.5 text-neutral-400 group-hover:text-white" />
                     )}
-                    {site.iconType === 'custom' && <SiteFavicon site={site} />}
+                    {site.iconType === "custom" && <SiteFavicon site={site} />}
                   </div>
 
                   {/* Bookmark descriptive metadata */}
@@ -591,7 +670,7 @@ export default function PinnedSites({
                       {site.title}
                     </span>
                     <span className="text-[11px] font-mono text-neutral-400 truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
-                      {site.url.replace(/^https?:\/\/(www\.)?/, '')}
+                      {site.url.replace(/^https?:\/\/(www\.)?/, "")}
                     </span>
                   </div>
                 </div>
@@ -674,16 +753,21 @@ export default function PinnedSites({
                 <span
                   className={`text-[11px] font-mono text-neutral-400 tracking-[0.2em] font-medium uppercase`}
                 >
-                  {editingSite ? 'CALIBRATE CONNECTION_NODE' : 'REGISTER CONNECTION_NODE'}
+                  {editingSite
+                    ? "CALIBRATE CONNECTION_NODE"
+                    : "REGISTER CONNECTION_NODE"}
                 </span>
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: 90 }}
+                  whileTap={{ scale: 0.85 }}
+                  transition={BTN_SPRING}
                   type="button"
                   onClick={closeModal}
                   aria-label="Close node registration form"
-                  className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white transition-all cursor-pointer"
+                  className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
-                </button>
+                </motion.button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -720,54 +804,67 @@ export default function PinnedSites({
 
                 {/* Icon option field */}
                 <div className="grid grid-cols-3 gap-2 pb-1.5">
-                  <button
+                  <motion.button
+                    whileHover={BTN_HOVER}
+                    whileTap={BTN_TAP}
+                    transition={BTN_SPRING}
                     type="button"
                     onClick={() => {
-                      setIconType('initials');
+                      setIconType("initials");
                     }}
-                    className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
-                      iconType === 'initials'
+                    className={`p-2 rounded-lg border text-[10px] text-center transition-colors cursor-pointer ${
+                      iconType === "initials"
                         ? `${colors.border} bg-neutral-900 text-white`
-                        : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
+                        : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
                     }`}
                   >
                     Initials
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileHover={BTN_HOVER}
+                    whileTap={BTN_TAP}
+                    transition={BTN_SPRING}
                     type="button"
                     onClick={() => {
-                      setIconType('custom');
+                      setIconType("custom");
                       setIconValue(getFaviconUrl(url));
                     }}
-                    className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
-                      iconType === 'custom'
+                    className={`p-2 rounded-lg border text-[10px] text-center transition-colors cursor-pointer ${
+                      iconType === "custom"
                         ? `${colors.border} bg-neutral-900 text-white`
-                        : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
+                        : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
                     }`}
                   >
                     Site Favicon
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileHover={BTN_HOVER}
+                    whileTap={BTN_TAP}
+                    transition={BTN_SPRING}
                     type="button"
                     onClick={() => {
-                      setIconType('icon');
-                      setIconValue('globe');
+                      setIconType("icon");
+                      setIconValue("globe");
                     }}
-                    className={`p-2 rounded-lg border text-[10px] text-center transition-all cursor-pointer ${
-                      iconType === 'icon'
+                    className={`p-2 rounded-lg border text-[10px] text-center transition-colors cursor-pointer ${
+                      iconType === "icon"
                         ? `${colors.border} bg-neutral-900 text-white`
-                        : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
+                        : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
                     }`}
                   >
                     Globe Icon
-                  </button>
+                  </motion.button>
                 </div>
 
-                {iconType === 'custom' && (
+                {iconType === "custom" && (
                   <div className="flex items-center gap-2 text-[10px] text-neutral-500 -mt-1 pb-1.5">
                     <div className="w-6 h-6 rounded border border-neutral-800 bg-neutral-900 flex items-center justify-center overflow-hidden shrink-0">
                       {url ? (
-                        <img src={getFaviconUrl(url)} alt="" className="w-4 h-4 object-contain" />
+                        <img
+                          src={getFaviconUrl(url)}
+                          alt=""
+                          className="w-4 h-4 object-contain"
+                        />
                       ) : (
                         <Globe2 className="w-3 h-3 text-neutral-600" />
                       )}
@@ -777,7 +874,7 @@ export default function PinnedSites({
                 )}
 
                 {/* Dynamic Icon character value input depending on type selection */}
-                {iconType === 'initials' && (
+                {iconType === "initials" && (
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-neutral-500 uppercase tracking-wider block">
                       Custom Icon Initials (Max 1-2 Chars)
@@ -786,7 +883,9 @@ export default function PinnedSites({
                       type="text"
                       maxLength={2}
                       value={iconValue}
-                      onChange={(e) => setIconValue(e.target.value.toUpperCase())}
+                      onChange={(e) =>
+                        setIconValue(e.target.value.toUpperCase())
+                      }
                       placeholder="e.g. GH"
                       className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-600 transition-all font-mono"
                     />
@@ -808,19 +907,25 @@ export default function PinnedSites({
                 </div>
 
                 <div className="flex gap-2 pt-2 justify-end">
-                  <button
+                  <motion.button
+                    whileHover={BTN_HOVER}
+                    whileTap={BTN_TAP}
+                    transition={BTN_SPRING}
                     type="button"
                     onClick={closeModal}
-                    className="p-2 border border-neutral-900 hover:border-neutral-800 hover:bg-neutral-900 text-neutral-400 transition-all text-xs rounded-lg uppercase tracking-wider cursor-pointer"
+                    className="p-2 border border-neutral-900 hover:border-neutral-800 hover:bg-neutral-900 text-neutral-400 transition-colors text-xs rounded-lg uppercase tracking-wider cursor-pointer"
                   >
                     Abort
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileHover={BTN_HOVER}
+                    whileTap={BTN_TAP}
+                    transition={BTN_SPRING}
                     type="submit"
-                    className={`p-2 text-neutral-950 font-bold ${colors.modalBtn} transition-all text-xs rounded-lg uppercase tracking-wider cursor-pointer`}
+                    className={`p-2 text-neutral-950 font-bold ${colors.modalBtn} transition-colors text-xs rounded-lg uppercase tracking-wider cursor-pointer`}
                   >
                     Save Config
-                  </button>
+                  </motion.button>
                 </div>
               </form>
             </motion.div>

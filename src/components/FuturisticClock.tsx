@@ -3,21 +3,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Globe, Wifi, Cpu } from 'lucide-react';
-import { UserSettings } from '../types';
+import { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
+import { Globe, Wifi, Cpu } from "lucide-react";
+import { UserSettings } from "../types";
 
 interface FuturisticClockProps {
   settings: UserSettings;
   addLog: (
-    module: 'SYS' | 'NET' | 'IO' | 'EXT',
-    type: 'info' | 'success' | 'warning' | 'packet',
+    module: "SYS" | "NET" | "IO" | "EXT",
+    type: "info" | "success" | "warning" | "packet",
     message: string,
   ) => void;
 }
 
-export default function FuturisticClock({ settings, addLog }: FuturisticClockProps) {
+export default function FuturisticClock({
+  settings,
+  addLog,
+}: FuturisticClockProps) {
   const [time, setTime] = useState(new Date());
   const [pingSim, setPingSim] = useState(12);
   const [packetTx, setPacketTx] = useState(1402);
@@ -39,7 +42,10 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
         const nextTime = new Date();
 
         // Trigger automatic telemetry packets inside logs
-        if (nextTime.getSeconds() !== prevTime.getSeconds() && nextTime.getSeconds() % 15 === 0) {
+        if (
+          nextTime.getSeconds() !== prevTime.getSeconds() &&
+          nextTime.getSeconds() % 15 === 0
+        ) {
           const rndPing = Math.floor(Math.random() * 8) + 8;
           setPingSim(rndPing);
           setCpuUsageSim(Math.floor(Math.random() * 15) + 10);
@@ -48,8 +54,8 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
           if (settingsRef.current.techPingDelaySim) {
             addLogRef.current(
-              'NET',
-              'packet',
+              "NET",
+              "packet",
               `ICMP Echo Request: seq=${nextTime.getSeconds()} size=64 bytes rtt=${rndPing}ms`,
             );
           }
@@ -68,20 +74,20 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   const rawSecs = time.getSeconds();
 
   const formattedHours = settings.timeFormat24h
-    ? hours.toString().padStart(2, '0')
-    : (hours % 12 || 12).toString().padStart(2, '0');
+    ? hours.toString().padStart(2, "0")
+    : (hours % 12 || 12).toString().padStart(2, "0");
 
-  const formattedMins = rawMins.toString().padStart(2, '0');
-  const formattedSecs = rawSecs.toString().padStart(2, '0');
-  const period = hours >= 12 ? 'PM' : 'AM';
+  const formattedMins = rawMins.toString().padStart(2, "0");
+  const formattedSecs = rawSecs.toString().padStart(2, "0");
+  const period = hours >= 12 ? "PM" : "AM";
 
   // Generate binary clock grid (6 columns: 2 for hours, 2 for mins, 2 for secs)
   const toBinaryDigits = (val: number): string[][] => {
     const tens = Math.floor(val / 10);
     const units = val % 10;
     // Tens binary array (4-bit representation), reversed for bottom-up layouts
-    const tensBinary = tens.toString(2).padStart(4, '0').split('');
-    const unitsBinary = units.toString(2).padStart(4, '0').split('');
+    const tensBinary = tens.toString(2).padStart(4, "0").split("");
+    const unitsBinary = units.toString(2).padStart(4, "0").split("");
     return [tensBinary, unitsBinary];
   };
 
@@ -93,21 +99,25 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   // Helper string mapping of Month Names
   const formatFullDate = () => {
     const options: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'short',
+      weekday: "long",
+      year: "numeric",
+      month: "short",
     };
-    return time.toLocaleDateString('en-US', options).toUpperCase();
+    return time.toLocaleDateString("en-US", options).toUpperCase();
   };
 
   const getShiftProgressText = () => {
-    if (!settings.showWorkProgress || !settings.workStart || !settings.workEnd) {
+    if (
+      !settings.showWorkProgress ||
+      !settings.workStart ||
+      !settings.workEnd
+    ) {
       return null;
     }
 
     try {
       const parseTimeToMinutes = (timeStr: string) => {
-        const parts = timeStr.split(':');
+        const parts = timeStr.split(":");
         const h = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
         return h * 60 + m;
@@ -125,7 +135,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
       }
 
       const totalShift = endMin - startMin;
-      if (totalShift <= 0) return '0%';
+      if (totalShift <= 0) return "0%";
 
       const elapsed = currentMin - startMin;
       const pct = (elapsed / totalShift) * 100;
@@ -138,59 +148,59 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   // Theme color styling mappings
   const getColorClasses = () => {
     switch (settings.themeId) {
-      case 'emerald':
+      case "emerald":
         return {
-          text: 'text-emerald-400',
-          glow: 'shadow-emerald-500/10',
-          border: 'border-emerald-500/20',
-          bgGlow: 'from-emerald-500/5',
-          accentBg: 'bg-emerald-500',
-          accentText: 'text-emerald-300',
+          text: "text-emerald-400",
+          glow: "shadow-emerald-500/10",
+          border: "border-emerald-500/20",
+          bgGlow: "from-emerald-500/5",
+          accentBg: "bg-emerald-500",
+          accentText: "text-emerald-300",
         };
-      case 'cyan':
+      case "cyan":
         return {
-          text: 'text-cyan-400',
-          glow: 'shadow-cyan-500/10',
-          border: 'border-cyan-500/20',
-          bgGlow: 'from-cyan-500/5',
-          accentBg: 'bg-cyan-500',
-          accentText: 'text-cyan-300',
+          text: "text-cyan-400",
+          glow: "shadow-cyan-500/10",
+          border: "border-cyan-500/20",
+          bgGlow: "from-cyan-500/5",
+          accentBg: "bg-cyan-500",
+          accentText: "text-cyan-300",
         };
-      case 'amber':
+      case "amber":
         return {
-          text: 'text-amber-400',
-          glow: 'shadow-amber-500/10',
-          border: 'border-amber-500/20',
-          bgGlow: 'from-amber-500/5',
-          accentBg: 'bg-amber-500',
-          accentText: 'text-amber-300',
+          text: "text-amber-400",
+          glow: "shadow-amber-500/10",
+          border: "border-amber-500/20",
+          bgGlow: "from-amber-500/5",
+          accentBg: "bg-amber-500",
+          accentText: "text-amber-300",
         };
-      case 'purple':
+      case "purple":
         return {
-          text: 'text-purple-400',
-          glow: 'shadow-purple-500/10',
-          border: 'border-purple-500/20',
-          bgGlow: 'from-purple-500/5',
-          accentBg: 'bg-purple-500',
-          accentText: 'text-purple-300',
+          text: "text-purple-400",
+          glow: "shadow-purple-500/10",
+          border: "border-purple-500/20",
+          bgGlow: "from-purple-500/5",
+          accentBg: "bg-purple-500",
+          accentText: "text-purple-300",
         };
-      case 'rose':
+      case "rose":
         return {
-          text: 'text-rose-400',
-          glow: 'shadow-rose-500/10',
-          border: 'border-rose-500/20',
-          bgGlow: 'from-rose-500/5',
-          accentBg: 'bg-rose-500',
-          accentText: 'text-rose-300',
+          text: "text-rose-400",
+          glow: "shadow-rose-500/10",
+          border: "border-rose-500/20",
+          bgGlow: "from-rose-500/5",
+          accentBg: "bg-rose-500",
+          accentText: "text-rose-300",
         };
       default:
         return {
-          text: 'text-emerald-400',
-          glow: 'shadow-emerald-500/10',
-          border: 'border-emerald-500/20',
-          bgGlow: 'from-emerald-500/5',
-          accentBg: 'bg-emerald-500',
-          accentText: 'text-emerald-300',
+          text: "text-emerald-400",
+          glow: "shadow-emerald-500/10",
+          border: "border-emerald-500/20",
+          bgGlow: "from-emerald-500/5",
+          accentBg: "bg-emerald-500",
+          accentText: "text-emerald-300",
         };
     }
   };
@@ -199,18 +209,18 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
   const getThemeBorderColor = () => {
     switch (settings.themeId) {
-      case 'emerald':
-        return 'border-emerald-500/50';
-      case 'cyan':
-        return 'border-cyan-500/50';
-      case 'amber':
-        return 'border-amber-500/50';
-      case 'purple':
-        return 'border-purple-500/50';
-      case 'rose':
-        return 'border-rose-500/50';
+      case "emerald":
+        return "border-emerald-500/50";
+      case "cyan":
+        return "border-cyan-500/50";
+      case "amber":
+        return "border-amber-500/50";
+      case "purple":
+        return "border-purple-500/50";
+      case "rose":
+        return "border-rose-500/50";
       default:
-        return 'border-cyan-500/50';
+        return "border-cyan-500/50";
     }
   };
 
@@ -237,7 +247,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
       >
         <span className="flex items-center gap-1.5 font-semibold">
           <Globe className="w-3.5 h-3.5 text-neutral-500 animate-pulse" />
-          UTC {(time.getTimezoneOffset() / 60) * -1 > 0 ? '+' : ''}
+          UTC {(time.getTimezoneOffset() / 60) * -1 > 0 ? "+" : ""}
           {(time.getTimezoneOffset() / 60) * -1}H
         </span>
         <span className="text-neutral-800">|</span>
@@ -292,9 +302,15 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
           {/* Dash signal bar from Elegant Dark design */}
           <div className="flex gap-1.5 items-center mt-1">
-            <div className={`h-1 w-8 opacity-30 rounded-full ${colors.accentBg}`}></div>
-            <div className={`h-1 w-20 opacity-60 rounded-full ${colors.accentBg}`}></div>
-            <div className={`h-1 w-4 opacity-10 rounded-full ${colors.accentBg}`}></div>
+            <div
+              className={`h-1 w-8 opacity-30 rounded-full ${colors.accentBg}`}
+            ></div>
+            <div
+              className={`h-1 w-20 opacity-60 rounded-full ${colors.accentBg}`}
+            ></div>
+            <div
+              className={`h-1 w-4 opacity-10 rounded-full ${colors.accentBg}`}
+            ></div>
           </div>
         </div>
 
@@ -311,7 +327,7 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
           <motion.span
             animate={{ opacity: [1, 0, 1] }}
-            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
             className={`text-5xl sm:text-6xl md:text-7xl font-light text-neutral-400 mx-1.5 pb-1`}
           >
             :
@@ -325,7 +341,9 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
           {settings.showSeconds && (
             <>
-              <span className="text-3xl sm:text-4xl font-light text-neutral-500 mx-1">:</span>
+              <span className="text-3xl sm:text-4xl font-light text-neutral-500 mx-1">
+                :
+              </span>
               <span
                 className={`text-3xl sm:text-4xl font-normal text-neutral-300 font-mono w-[1.25em] inline-block`}
               >
@@ -347,7 +365,9 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
           <div className="flex flex-col items-start font-mono text-[10px] tracking-wider text-neutral-400">
             {settings.showWorkProgress ? (
               <div className="flex flex-col items-start">
-                <span className="text-neutral-500 font-bold">SHIFT PROGRESS</span>
+                <span className="text-neutral-500 font-bold">
+                  SHIFT PROGRESS
+                </span>
                 <span
                   className={`${colors.text} font-bold font-mono text-xs sm:text-sm mt-0.5 animate-pulse`}
                 >
@@ -356,7 +376,9 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
               </div>
             ) : (
               <div className="flex flex-col items-start">
-                <span className="text-neutral-500 font-bold">SYSTEM STATUS</span>
+                <span className="text-neutral-500 font-bold">
+                  SYSTEM STATUS
+                </span>
                 <span className="text-neutral-300 font-mono text-xs mt-0.5">
                   ESTABLISHED SECURE LINK
                 </span>
@@ -381,16 +403,19 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
 
         {/* Embedded Floating Binary Matrix if user requested High Tech vibes */}
         {settings.showHexClock && (
-          <div className="mt-4 flex space-x-2.5 justify-center z-10" id="binary-matrix">
+          <div
+            className="mt-4 flex space-x-2.5 justify-center z-10"
+            id="binary-matrix"
+          >
             {binaryColumns.map((col, colIdx) => (
               <div key={colIdx} className="flex flex-col space-y-1">
                 {col.map((bit, bitIdx) => (
                   <div
                     key={bitIdx}
                     className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-                      bit === '1'
+                      bit === "1"
                         ? `${colors.accentBg} shadow-[0_0_6px_var(--color-theme)] scale-110`
-                        : 'bg-neutral-800 border border-neutral-700/20'
+                        : "bg-neutral-800 border border-neutral-700/20"
                     }`}
                   />
                 ))}
