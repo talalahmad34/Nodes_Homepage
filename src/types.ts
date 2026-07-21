@@ -7,7 +7,7 @@ export interface PinnedSite {
   id: string;
   title: string;
   url: string;
-  iconType: 'initials' | 'icon' | 'custom';
+  iconType: "initials" | "icon" | "custom";
   iconValue: string; // Initials or Lucide icon name or image URL
   category?: string;
   visitCount: number;
@@ -40,7 +40,7 @@ export interface UserSettings {
   showSeconds: boolean;
   searchEngineId: string;
   showHexClock: boolean;
-  activeBackground: 'network' | 'starfield' | 'grid';
+  activeBackground: "network" | "starfield" | "grid";
   showAnalogOverlay: boolean;
   techPingDelaySim: boolean;
   showWorkProgress?: boolean;
@@ -51,7 +51,7 @@ export interface UserSettings {
 export interface SystemLog {
   id: string;
   timestamp: string;
-  module: 'SYS' | 'NET' | 'IO' | 'EXT';
-  type: 'info' | 'success' | 'warning' | 'packet';
+  module: "SYS" | "NET" | "IO" | "EXT";
+  type: "info" | "success" | "warning" | "packet";
   message: string;
 }

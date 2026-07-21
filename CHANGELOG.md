@@ -2,6 +2,21 @@
 
 All notable changes to the **Nodes Homepage Extension** project will be documented in this file.
 
+## [1.4.0] - 2026-07-21
+
+### Added
+
+- **Revamped "grid" background**: the simplest of the three backdrop visualizers (previously a static grid of blinking binary digits) is now a living circuit-board — glowing data packets travel along the grid lines, hard-turning at intersections, while dormant intersection nodes light up as the cursor, a packet, or a click ripple passes near them. Clicking now also fires a 4-directional "power surge" burst of packets from the nearest intersection, in addition to the existing ripple ring.
+- **Hover/tap micro-interactions across the whole UI**: buttons, toggles, pinned-site tiles, theme/engine/background pickers, and the AI portal cards now have consistent spring-based hover and press feedback (`src/lib/motion.ts`), instead of color-only `:hover` states. The settings-drawer toggle switches were consolidated into a single reusable `ToggleTrack` component with an animated knob.
+- **CI**: added the `.github/workflows/ci.yml` workflow the README already documented but which didn't actually exist in the repo (typecheck, lint, format-check, build on every push/PR to `main`).
+
+### Fixed
+
+- Two `react-hooks/set-state-in-effect` lint warnings: the boot-time system log entries are now seeded via a lazy `useState` initializer instead of an effect that called `setState` synchronously, and the search console's active engine is now derived with `useMemo` from `settings.searchEngineId` instead of mirrored into a second piece of state via an effect.
+- The circuit-grid and network backgrounds' pulse rings and scanlines were rendering the wrong glow color for the Purple and Rose themes (silently falling back to the amber RGB triplet in a repeated inline ternary that only handled 3 of 5 themes). Colors are now looked up once per theme.
+- Removed vestigial AI Studio scaffold files that had nothing to do with this Chrome extension: `nodeshomepageimprovements.bundle` (a stray committed git bundle), `metadata.json`, `.env.example`, and an untracked `assets/.aistudio/` folder.
+- The codebase wasn't actually passing its own `format:check` script (13 of ~14 files had drifted from the Prettier config); reformatted everything so CI's format gate is meaningful going forward.
+
 ## [1.3.0] - 2026-07-19
 
 ### Added

@@ -3,99 +3,142 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Cpu, X, Globe, User, Palette, Eye, Terminal, FolderSync } from 'lucide-react';
-import { PinnedSite, UserSettings, SystemLog, SystemTheme } from './types';
-import { readLocal, readSync, write } from './lib/storage';
-import NetworkBackground from './components/NetworkBackground';
-import FuturisticClock from './components/FuturisticClock';
-import SearchConsole from './components/SearchConsole';
-import PinnedSites from './components/PinnedSites';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ChangeEvent,
+} from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Settings,
+  Cpu,
+  X,
+  Globe,
+  User,
+  Palette,
+  Eye,
+  Terminal,
+  FolderSync,
+} from "lucide-react";
+import { PinnedSite, UserSettings, SystemLog, SystemTheme } from "./types";
+import { readLocal, readSync, write } from "./lib/storage";
+import NetworkBackground from "./components/NetworkBackground";
+import FuturisticClock from "./components/FuturisticClock";
+import SearchConsole from "./components/SearchConsole";
+import PinnedSites from "./components/PinnedSites";
+import { BTN_HOVER, BTN_TAP, BTN_SPRING } from "./lib/motion";
+
+// Shared animated switch visual for the settings drawer toggles — the knob springs
+// across on change and the whole track gives a light hover/press bounce.
+function ToggleTrack({
+  checked,
+  accent,
+}: {
+  checked: boolean;
+  accent: string;
+}) {
+  return (
+    <motion.div
+      className="w-8 h-4 rounded-full p-0.5 flex cursor-pointer"
+      animate={{ backgroundColor: checked ? accent : "#262626" }}
+      transition={{ duration: 0.25 }}
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.92 }}
+    >
+      <motion.div
+        className="w-3 h-3 rounded-full bg-black"
+        animate={{ x: checked ? 16 : 0 }}
+        transition={BTN_SPRING}
+      />
+    </motion.div>
+  );
+}
 
 const THEMES: SystemTheme[] = [
   {
-    id: 'emerald',
-    name: 'Emerald Cyber',
-    primary: 'emerald-400',
-    secondary: 'emerald-600',
-    accent: '#34d399',
-    bgClass: 'rgba(6, 78, 59, 0.15)',
-    terminalColor: '#059669',
+    id: "emerald",
+    name: "Emerald Cyber",
+    primary: "emerald-400",
+    secondary: "emerald-600",
+    accent: "#34d399",
+    bgClass: "rgba(6, 78, 59, 0.15)",
+    terminalColor: "#059669",
   },
   {
-    id: 'cyan',
-    name: 'Cyan Hologram',
-    primary: 'cyan-400',
-    secondary: 'cyan-600',
-    accent: '#22d3ee',
-    bgClass: 'rgba(8, 145, 178, 0.15)',
-    terminalColor: '#0891b2',
+    id: "cyan",
+    name: "Cyan Hologram",
+    primary: "cyan-400",
+    secondary: "cyan-600",
+    accent: "#22d3ee",
+    bgClass: "rgba(8, 145, 178, 0.15)",
+    terminalColor: "#0891b2",
   },
   {
-    id: 'amber',
-    name: 'Retro Amber',
-    primary: 'amber-400',
-    secondary: 'amber-600',
-    accent: '#fbbf24',
-    bgClass: 'rgba(146, 64, 14, 0.15)',
-    terminalColor: '#d97706',
+    id: "amber",
+    name: "Retro Amber",
+    primary: "amber-400",
+    secondary: "amber-600",
+    accent: "#fbbf24",
+    bgClass: "rgba(146, 64, 14, 0.15)",
+    terminalColor: "#d97706",
   },
   {
-    id: 'purple',
-    name: 'Quantum Purple',
-    primary: 'purple-400',
-    secondary: 'purple-600',
-    accent: '#c084fc',
-    bgClass: 'rgba(107, 33, 168, 0.15)',
-    terminalColor: '#9333ea',
+    id: "purple",
+    name: "Quantum Purple",
+    primary: "purple-400",
+    secondary: "purple-600",
+    accent: "#c084fc",
+    bgClass: "rgba(107, 33, 168, 0.15)",
+    terminalColor: "#9333ea",
   },
   {
-    id: 'rose',
-    name: 'Rose Matrix',
-    primary: 'rose-400',
-    secondary: 'rose-600',
-    accent: '#fb7185',
-    bgClass: 'rgba(159, 18, 57, 0.15)',
-    terminalColor: '#e11d48',
+    id: "rose",
+    name: "Rose Matrix",
+    primary: "rose-400",
+    secondary: "rose-600",
+    accent: "#fb7185",
+    bgClass: "rgba(159, 18, 57, 0.15)",
+    terminalColor: "#e11d48",
   },
 ];
 
 const DEFAULT_SITES: PinnedSite[] = [
   {
-    id: 'google',
-    title: 'Google',
-    url: 'https://google.com',
-    iconType: 'initials',
-    iconValue: 'GO',
-    category: 'Search',
+    id: "google",
+    title: "Google",
+    url: "https://google.com",
+    iconType: "initials",
+    iconValue: "GO",
+    category: "Search",
     visitCount: 0,
   },
   {
-    id: 'github',
-    title: 'GitHub',
-    url: 'https://github.com',
-    iconType: 'initials',
-    iconValue: 'GH',
-    category: 'Development',
+    id: "github",
+    title: "GitHub",
+    url: "https://github.com",
+    iconType: "initials",
+    iconValue: "GH",
+    category: "Development",
     visitCount: 0,
   },
   {
-    id: 'youtube',
-    title: 'YouTube',
-    url: 'https://youtube.com',
-    iconType: 'initials',
-    iconValue: 'YT',
-    category: 'Media',
+    id: "youtube",
+    title: "YouTube",
+    url: "https://youtube.com",
+    iconType: "initials",
+    iconValue: "YT",
+    category: "Media",
     visitCount: 0,
   },
   {
-    id: 'stackoverflow',
-    title: 'StackOverflow',
-    url: 'https://stackoverflow.com',
-    iconType: 'initials',
-    iconValue: 'SO',
-    category: 'Development',
+    id: "stackoverflow",
+    title: "StackOverflow",
+    url: "https://stackoverflow.com",
+    iconType: "initials",
+    iconValue: "SO",
+    category: "Development",
     visitCount: 0,
   },
 ];
@@ -103,15 +146,17 @@ const DEFAULT_SITES: PinnedSite[] = [
 // Structural validation for a single pinned site parsed from an untrusted backup file/paste —
 // guards against e.g. an array of plain strings passing the earlier `Array.isArray` check alone.
 function isValidPinnedSite(value: unknown): value is PinnedSite {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const site = value as Record<string, unknown>;
   return (
-    typeof site.id === 'string' &&
-    typeof site.title === 'string' &&
-    typeof site.url === 'string' &&
-    (site.iconType === 'initials' || site.iconType === 'icon' || site.iconType === 'custom') &&
-    typeof site.iconValue === 'string' &&
-    typeof site.visitCount === 'number'
+    typeof site.id === "string" &&
+    typeof site.title === "string" &&
+    typeof site.url === "string" &&
+    (site.iconType === "initials" ||
+      site.iconType === "icon" ||
+      site.iconType === "custom") &&
+    typeof site.iconValue === "string" &&
+    typeof site.visitCount === "number"
   );
 }
 
@@ -128,12 +173,12 @@ function parseBackupPayload(raw: string): BackupPayload | null {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
+  if (!parsed || typeof parsed !== "object") return null;
 
   const data = parsed as Record<string, unknown>;
   const result: BackupPayload = {};
 
-  if (data.settings && typeof data.settings === 'object') {
+  if (data.settings && typeof data.settings === "object") {
     result.settings = data.settings as Partial<UserSettings>;
   }
   if (Array.isArray(data.pinnedSites)) {
@@ -145,43 +190,76 @@ function parseBackupPayload(raw: string): BackupPayload | null {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  userName: 'Operator',
-  themeId: 'cyan',
+  userName: "Operator",
+  themeId: "cyan",
   timeFormat24h: true,
   showSeconds: true,
-  searchEngineId: 'duckduckgo',
+  searchEngineId: "duckduckgo",
   showHexClock: true,
-  activeBackground: 'network',
+  activeBackground: "network",
   showAnalogOverlay: false,
   techPingDelaySim: true,
   showWorkProgress: false,
-  workStart: '09:00',
-  workEnd: '17:00',
+  workStart: "09:00",
+  workEnd: "17:00",
 };
 
 export default function App() {
   const telemetryRef = useRef<HTMLTextAreaElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useState<UserSettings>(() => {
-    const parsed = readLocal<UserSettings>('netgrid_settings', DEFAULT_SETTINGS);
+    const parsed = readLocal<UserSettings>(
+      "netgrid_settings",
+      DEFAULT_SETTINGS,
+    );
     // Force duckduckgo if the stored default is old 'google' or missing
-    if (parsed.searchEngineId === 'google') {
-      parsed.searchEngineId = 'duckduckgo';
+    if (parsed.searchEngineId === "google") {
+      parsed.searchEngineId = "duckduckgo";
     }
     return parsed;
   });
 
   const [pinnedSites, setPinnedSites] = useState<PinnedSite[]>(() => {
-    const parsed = readLocal<PinnedSite[]>('netgrid_pinned_sites', DEFAULT_SITES);
+    const parsed = readLocal<PinnedSite[]>(
+      "netgrid_pinned_sites",
+      DEFAULT_SITES,
+    );
     // Filter out ChatGPT / Gemini standard bookmarks to avoid duplication
-    return parsed.filter((s) => s.id !== 'chatgpt' && s.id !== 'gemini');
+    return parsed.filter((s) => s.id !== "chatgpt" && s.id !== "gemini");
   });
 
-  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>(() => {
+    const bootTime = new Date().toLocaleTimeString("en-US", { hour12: false });
+    const bootLog = (
+      module: SystemLog["module"],
+      type: SystemLog["type"],
+      message: string,
+    ) => ({
+      id: Math.random().toString(36).substring(2, 9),
+      timestamp: bootTime,
+      module,
+      type,
+      message,
+    });
+    return [
+      bootLog(
+        "SYS",
+        "info",
+        "Interactive clock matrix calibrated to physical UTC parameters.",
+      ),
+      bootLog("NET", "info", "Established listening channel on port 3000."),
+      bootLog(
+        "SYS",
+        "success",
+        "NETGRID core system initialized successfully.",
+      ),
+    ];
+  });
   const [isLogPanelOpen, setIsLogPanelOpen] = useState(false);
-  const [telemetryStatus, setTelemetryStatus] = useState<{ ok: boolean; message: string } | null>(
-    null,
-  );
+  const [telemetryStatus, setTelemetryStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [localIp, setLocalIp] = useState<string | null>(null);
 
@@ -189,10 +267,13 @@ export default function App() {
   // local-cache paint, so edits made on another signed-in device show up here too.
   useEffect(() => {
     let cancelled = false;
-    readSync(['netgrid_settings', 'netgrid_pinned_sites']).then((synced) => {
+    readSync(["netgrid_settings", "netgrid_pinned_sites"]).then((synced) => {
       if (cancelled) return;
       if (synced.netgrid_settings) {
-        setSettings((prev) => ({ ...prev, ...(synced.netgrid_settings as UserSettings) }));
+        setSettings((prev) => ({
+          ...prev,
+          ...(synced.netgrid_settings as UserSettings),
+        }));
       }
       if (Array.isArray(synced.netgrid_pinned_sites)) {
         setPinnedSites(synced.netgrid_pinned_sites as PinnedSite[]);
@@ -205,17 +286,20 @@ export default function App() {
 
   // Auto-save settings when updated (mirrors to localStorage + chrome.storage.sync)
   useEffect(() => {
-    write('netgrid_settings', settings);
+    write("netgrid_settings", settings);
   }, [settings]);
 
   // Auto-save pinned sites when updated (mirrors to localStorage + chrome.storage.sync)
   useEffect(() => {
-    write('netgrid_pinned_sites', pinnedSites);
+    write("netgrid_pinned_sites", pinnedSites);
   }, [pinnedSites]);
 
   // Sync state to telemetry text area ref when state updates
   useEffect(() => {
-    if (telemetryRef.current && document.activeElement !== telemetryRef.current) {
+    if (
+      telemetryRef.current &&
+      document.activeElement !== telemetryRef.current
+    ) {
       telemetryRef.current.value = JSON.stringify({ settings, pinnedSites });
     }
   }, [settings, pinnedSites, isSettingsOpen]);
@@ -224,10 +308,16 @@ export default function App() {
   useEffect(() => {
     const updateIp = () => {
       try {
-        if (typeof chrome !== 'undefined' && chrome.system && chrome.system.network) {
+        if (
+          typeof chrome !== "undefined" &&
+          chrome.system &&
+          chrome.system.network
+        ) {
           chrome.system.network.getNetworkInterfaces((interfaces) => {
             const ipv4Interface = interfaces.find(
-              (iface) => iface.address.includes('.') && !iface.address.startsWith('127.0'),
+              (iface) =>
+                iface.address.includes(".") &&
+                !iface.address.startsWith("127.0"),
             );
             if (ipv4Interface) {
               setLocalIp(ipv4Interface.address);
@@ -242,7 +332,7 @@ export default function App() {
     updateIp();
 
     if (
-      typeof chrome !== 'undefined' &&
+      typeof chrome !== "undefined" &&
       chrome.system &&
       chrome.system.network &&
       chrome.system.network.onNetworkLinkChanged
@@ -257,12 +347,12 @@ export default function App() {
   // System actions telemetry log callback function, stabilized safely to prevent triggers
   const addLog = useCallback(
     (
-      module: 'SYS' | 'NET' | 'IO' | 'EXT',
-      type: 'info' | 'success' | 'warning' | 'packet',
+      module: "SYS" | "NET" | "IO" | "EXT",
+      type: "info" | "success" | "warning" | "packet",
       message: string,
     ) => {
       const formattedDate = new Date();
-      const ts = formattedDate.toLocaleTimeString('en-US', { hour12: false });
+      const ts = formattedDate.toLocaleTimeString("en-US", { hour12: false });
 
       setLogs((prev) => [
         {
@@ -278,19 +368,16 @@ export default function App() {
     [],
   );
 
-  // Generate welcome log only once at initial boot up
-  useEffect(() => {
-    addLog('SYS', 'success', 'NETGRID core system initialized successfully.');
-    addLog('NET', 'info', `Established listening channel on port 3000.`);
-    addLog('SYS', 'info', 'Interactive clock matrix calibrated to physical UTC parameters.');
-  }, [addLog]);
-
   const updateSettingField = (key: keyof UserSettings, value: any) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
-    addLog('SYS', 'success', `Configuration calibration updated: ${key} -> ${value}`);
+    addLog(
+      "SYS",
+      "success",
+      `Configuration calibration updated: ${key} -> ${value}`,
+    );
   };
 
-  const handleAddSite = (site: Omit<PinnedSite, 'id' | 'visitCount'>) => {
+  const handleAddSite = (site: Omit<PinnedSite, "id" | "visitCount">) => {
     const newSite: PinnedSite = {
       ...site,
       id: Math.random().toString(36).substring(2, 9),
@@ -300,20 +387,28 @@ export default function App() {
   };
 
   const handleEditSite = (updated: PinnedSite) => {
-    setPinnedSites((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setPinnedSites((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s)),
+    );
   };
 
   const handleDeleteSite = (id: string) => {
     const target = pinnedSites.find((s) => s.id === id);
     if (target) {
       setPinnedSites((prev) => prev.filter((s) => s.id !== id));
-      addLog('IO', 'warning', `Connection node removed from active index: ${target.title}`);
+      addLog(
+        "IO",
+        "warning",
+        `Connection node removed from active index: ${target.title}`,
+      );
     }
   };
 
   const handleIncrementVisit = (id: string) => {
     setPinnedSites((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, visitCount: s.visitCount + 1 } : s)),
+      prev.map((s) =>
+        s.id === id ? { ...s, visitCount: s.visitCount + 1 } : s,
+      ),
     );
   };
 
@@ -322,8 +417,15 @@ export default function App() {
   const applyBackupPayload = (raw: string) => {
     const payload = parseBackupPayload(raw);
     if (!payload) {
-      addLog('SYS', 'warning', 'Restoration sequence failed: Invalid segment format');
-      setTelemetryStatus({ ok: false, message: 'Please provide a valid backup JSON format.' });
+      addLog(
+        "SYS",
+        "warning",
+        "Restoration sequence failed: Invalid segment format",
+      );
+      setTelemetryStatus({
+        ok: false,
+        message: "Please provide a valid backup JSON format.",
+      });
       setTimeout(() => setTelemetryStatus(null), 4000);
       return;
     }
@@ -334,27 +436,31 @@ export default function App() {
     if (payload.pinnedSites) {
       setPinnedSites(payload.pinnedSites);
     }
-    addLog('SYS', 'success', 'System backup telemetry successfully restored');
-    setTelemetryStatus({ ok: true, message: 'Backup restored successfully.' });
+    addLog("SYS", "success", "System backup telemetry successfully restored");
+    setTelemetryStatus({ ok: true, message: "Backup restored successfully." });
     setTimeout(() => setTelemetryStatus(null), 4000);
   };
 
   const handleDownloadBackup = () => {
     const payload = JSON.stringify({ settings, pinnedSites }, null, 2);
-    const blob = new Blob([payload], { type: 'application/json' });
+    const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     const dateStamp = new Date().toISOString().slice(0, 10);
     link.href = url;
     link.download = `nodes-homepage-backup-${dateStamp}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    addLog('SYS', 'success', 'Telemetry configuration backup downloaded as file');
+    addLog(
+      "SYS",
+      "success",
+      "Telemetry configuration backup downloaded as file",
+    );
   };
 
   const handleImportBackupFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = '';
+    e.target.value = "";
     if (!file) return;
     file.text().then(applyBackupPayload);
   };
@@ -362,7 +468,7 @@ export default function App() {
   // Human greeting calculator dependent on hours
   const calculateGreeting = () => {
     const currentHr = new Date().getHours();
-    let bracket = 'INITIATE';
+    let bracket = "INITIATE";
 
     if (settings.userName) {
       bracket = settings.userName;
@@ -373,7 +479,8 @@ export default function App() {
     return `ACCESS_GRANTED: Good Evening, ${bracket}`;
   };
 
-  const currentTheme = THEMES.find((th) => th.id === settings.themeId) || THEMES[0];
+  const currentTheme =
+    THEMES.find((th) => th.id === settings.themeId) || THEMES[0];
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center justify-between text-[#A0A0A5] overflow-x-hidden font-sans pb-3 sm:pb-5 select-none bg-transparent">
@@ -381,15 +488,18 @@ export default function App() {
       <div className="absolute inset-0 bg-[#050506] -z-30 pointer-events-none" />
 
       {/* Background Interactive Canvas Overlay */}
-      <NetworkBackground type={settings.activeBackground} colorTheme={currentTheme.primary} />
+      <NetworkBackground
+        type={settings.activeBackground}
+        colorTheme={currentTheme.primary}
+      />
 
       {/* Technical Grid Overlay from Elegant Dark */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.035] -z-10"
         style={{
           backgroundImage:
-            'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
+            "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
         }}
       ></div>
 
@@ -397,7 +507,7 @@ export default function App() {
       <div
         className="absolute inset-0 pointer-events-none -z-10 transition-all duration-1000"
         style={{
-          background: `radial-gradient(circle at 50% 45%, ${currentTheme.id === 'cyan' ? 'rgba(6, 182, 212, 0.08)' : currentTheme.bgClass}, transparent 75%)`,
+          background: `radial-gradient(circle at 50% 45%, ${currentTheme.id === "cyan" ? "rgba(6, 182, 212, 0.08)" : currentTheme.bgClass}, transparent 75%)`,
         }}
       />
 
@@ -451,14 +561,17 @@ export default function App() {
             </div>
           </div>
 
-          <button
+          <motion.button
+            whileHover={BTN_HOVER}
+            whileTap={BTN_TAP}
+            transition={BTN_SPRING}
             onClick={() => setIsSettingsOpen(true)}
-            className="p-1.5 px-3 select-none text-neutral-300 rounded-lg border border-neutral-800 bg-neutral-950/80 hover:text-white hover:border-neutral-700 transition-all cursor-pointer flex items-center gap-1.5 font-mono"
+            className="p-1.5 px-3 select-none text-neutral-300 rounded-lg border border-neutral-800 bg-neutral-950/80 hover:text-white hover:border-neutral-700 transition-colors cursor-pointer flex items-center gap-1.5 font-mono"
             id="control-settings-trigger-btn"
           >
             <Settings className="w-4 h-4 text-neutral-450" />
             <span className="text-xs uppercase tracking-wider">Config</span>
-          </button>
+          </motion.button>
         </div>
       </header>
 
@@ -468,7 +581,11 @@ export default function App() {
         <FuturisticClock settings={settings} addLog={addLog} />
 
         {/* 2. Interactive Search terminal bar */}
-        <SearchConsole settings={settings} updateSettings={updateSettingField} addLog={addLog} />
+        <SearchConsole
+          settings={settings}
+          updateSettings={updateSettingField}
+          addLog={addLog}
+        />
 
         {/* 3. Pinned custom shortcut grid items */}
         <PinnedSites
@@ -486,7 +603,7 @@ export default function App() {
       {/* Footer Status Bar from Elegant Dark guidelines */}
       <footer className="w-full max-w-none px-6 sm:px-10 py-3 border-t border-neutral-800/40 mt-3 sm:mt-4 flex justify-between items-center text-[10.5px] uppercase tracking-[0.25em] text-neutral-400 z-10 font-mono">
         <div className="flex gap-3 sm:gap-6 font-medium">
-          <span>Local IP: {localIp ?? 'Unavailable'}</span>
+          <span>Local IP: {localIp ?? "Unavailable"}</span>
           <span className="text-neutral-805 hidden sm:inline">|</span>
           <span className="hidden sm:inline">Gateway: Connected</span>
           <span className="text-neutral-805 hidden sm:inline">|</span>
@@ -495,21 +612,24 @@ export default function App() {
           </span>
         </div>
         <div className="flex gap-3 items-center font-medium">
-          <button
+          <motion.button
+            whileHover={BTN_HOVER}
+            whileTap={BTN_TAP}
+            transition={BTN_SPRING}
             onClick={() => setIsLogPanelOpen((prev) => !prev)}
-            aria-label={isLogPanelOpen ? 'Hide system log' : 'Show system log'}
+            aria-label={isLogPanelOpen ? "Hide system log" : "Show system log"}
             aria-expanded={isLogPanelOpen}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all cursor-pointer normal-case tracking-normal ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-colors cursor-pointer normal-case tracking-normal ${
               isLogPanelOpen
-                ? 'border-neutral-700 text-white bg-neutral-900'
-                : 'border-transparent text-neutral-500 hover:text-neutral-300'
+                ? "border-neutral-700 text-white bg-neutral-900"
+                : "border-transparent text-neutral-500 hover:text-neutral-300"
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
             <span className="text-[10px] uppercase tracking-wider hidden sm:inline">
               System Log
             </span>
-          </button>
+          </motion.button>
           <div className="flex gap-1.5 items-center">
             <div
               className="w-1.5 h-3 rounded-xs"
@@ -537,7 +657,7 @@ export default function App() {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 20, opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+            transition={{ type: "spring", damping: 28, stiffness: 220 }}
             className="fixed bottom-3 right-3 sm:right-5 z-40 w-[calc(100%-1.5rem)] sm:w-96 max-h-64 bg-neutral-950/95 border border-neutral-800 rounded-xl shadow-2xl backdrop-blur-md font-mono overflow-hidden flex flex-col"
             id="system-log-panel"
           >
@@ -546,13 +666,16 @@ export default function App() {
                 <Terminal className="w-3.5 h-3.5" />
                 System Log
               </span>
-              <button
+              <motion.button
+                whileHover={{ scale: 1.15, rotate: 90 }}
+                whileTap={{ scale: 0.85 }}
+                transition={BTN_SPRING}
                 onClick={() => setIsLogPanelOpen(false)}
                 aria-label="Close system log"
-                className="p-1 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+                className="p-1 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
-              </button>
+              </motion.button>
             </div>
             <div
               className="overflow-y-auto scrollbar-thin px-3 py-2 space-y-1 text-[10.5px]"
@@ -561,25 +684,34 @@ export default function App() {
               aria-label="System telemetry log"
             >
               {logs.length === 0 && (
-                <div className="text-neutral-600 py-4 text-center">No events recorded yet.</div>
+                <div className="text-neutral-600 py-4 text-center">
+                  No events recorded yet.
+                </div>
               )}
               {logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-2 text-neutral-400">
-                  <span className="text-neutral-600 shrink-0">{log.timestamp}</span>
+                <div
+                  key={log.id}
+                  className="flex items-start gap-2 text-neutral-400"
+                >
+                  <span className="text-neutral-600 shrink-0">
+                    {log.timestamp}
+                  </span>
                   <span
                     className={`shrink-0 font-bold ${
-                      log.type === 'success'
-                        ? 'text-emerald-400'
-                        : log.type === 'warning'
-                          ? 'text-amber-400'
-                          : log.type === 'packet'
-                            ? 'text-cyan-400'
-                            : 'text-neutral-500'
+                      log.type === "success"
+                        ? "text-emerald-400"
+                        : log.type === "warning"
+                          ? "text-amber-400"
+                          : log.type === "packet"
+                            ? "text-cyan-400"
+                            : "text-neutral-500"
                     }`}
                   >
                     [{log.module}]
                   </span>
-                  <span className="text-neutral-300 break-words">{log.message}</span>
+                  <span className="text-neutral-300 break-words">
+                    {log.message}
+                  </span>
                 </div>
               ))}
             </div>
@@ -598,10 +730,10 @@ export default function App() {
             />
 
             <motion.div
-              initial={{ x: '100%' }}
+              initial={{ x: "100%" }}
               animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 180 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 180 }}
               className="relative w-full max-w-sm h-full bg-neutral-950 border-l border-neutral-800 p-6 flex flex-col justify-between font-mono z-10 shadow-2xl"
               id="settings-drawer-container"
             >
@@ -619,13 +751,16 @@ export default function App() {
                     <Cpu className={`w-4 h-4 text-${currentTheme.primary}`} />
                     SYSTEM CALIBRATION
                   </span>
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.15, rotate: 90 }}
+                    whileTap={{ scale: 0.85 }}
+                    transition={BTN_SPRING}
                     onClick={() => setIsSettingsOpen(false)}
                     aria-label="Close system calibration panel"
-                    className="p-1 px-1.5 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+                    className="p-1 px-1.5 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
-                  </button>
+                  </motion.button>
                 </div>
 
                 {/* Username handler field */}
@@ -637,7 +772,9 @@ export default function App() {
                   <input
                     type="text"
                     value={settings.userName}
-                    onChange={(e) => updateSettingField('userName', e.target.value)}
+                    onChange={(e) =>
+                      updateSettingField("userName", e.target.value)
+                    }
                     placeholder="e.g. Initiator"
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-700 transition-all font-mono"
                     id="username-setting-field"
@@ -654,13 +791,18 @@ export default function App() {
                     {THEMES.map((theme) => {
                       const isSelected = theme.id === settings.themeId;
                       return (
-                        <button
+                        <motion.button
                           key={theme.id}
-                          onClick={() => updateSettingField('themeId', theme.id)}
-                          className={`p-2.5 rounded-lg border text-xs text-left transition-all flex items-center justify-between cursor-pointer focus:outline-none ${
+                          whileHover={{ scale: 1.02, x: 2 }}
+                          whileTap={BTN_TAP}
+                          transition={BTN_SPRING}
+                          onClick={() =>
+                            updateSettingField("themeId", theme.id)
+                          }
+                          className={`p-2.5 rounded-lg border text-xs text-left transition-colors flex items-center justify-between cursor-pointer focus:outline-none ${
                             isSelected
-                              ? 'bg-neutral-900 text-white'
-                              : 'border-neutral-900 hover:border-neutral-800 text-neutral-500 hover:text-neutral-400'
+                              ? "bg-neutral-900 text-white"
+                              : "border-neutral-900 hover:border-neutral-800 text-neutral-500 hover:text-neutral-400"
                           }`}
                           style={{
                             borderColor: isSelected ? theme.accent : undefined,
@@ -674,9 +816,11 @@ export default function App() {
                             {theme.name}
                           </span>
                           {isSelected && (
-                            <span className="text-[9px] opacity-65 font-bold">[ACTIVE]</span>
+                            <span className="text-[9px] opacity-65 font-bold">
+                              [ACTIVE]
+                            </span>
                           )}
-                        </button>
+                        </motion.button>
                       );
                     })}
                   </div>
@@ -689,22 +833,29 @@ export default function App() {
                     Backdrop Visualizer Node
                   </span>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {(['network', 'grid', 'starfield'] as const).map((bgType) => {
-                      const isSelected = settings.activeBackground === bgType;
-                      return (
-                        <button
-                          key={bgType}
-                          onClick={() => updateSettingField('activeBackground', bgType)}
-                          className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-all cursor-pointer ${
-                            isSelected
-                              ? 'border-neutral-700 bg-neutral-900 text-white font-bold'
-                              : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
-                          }`}
-                        >
-                          {bgType}
-                        </button>
-                      );
-                    })}
+                    {(["network", "grid", "starfield"] as const).map(
+                      (bgType) => {
+                        const isSelected = settings.activeBackground === bgType;
+                        return (
+                          <motion.button
+                            key={bgType}
+                            whileHover={BTN_HOVER}
+                            whileTap={BTN_TAP}
+                            transition={BTN_SPRING}
+                            onClick={() =>
+                              updateSettingField("activeBackground", bgType)
+                            }
+                            className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-colors cursor-pointer ${
+                              isSelected
+                                ? "border-neutral-700 bg-neutral-900 text-white font-bold"
+                                : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
+                            }`}
+                          >
+                            {bgType}
+                          </motion.button>
+                        );
+                      },
+                    )}
                   </div>
                 </div>
 
@@ -716,28 +867,35 @@ export default function App() {
                   </span>
                   <div className="grid grid-cols-2 gap-1.5">
                     {[
-                      { id: 'duckduckgo', name: 'DuckDuckGo' },
-                      { id: 'google', name: 'Google' },
-                      { id: 'github', name: 'GitHub' },
-                      { id: 'youtube', name: 'YouTube' },
-                      { id: 'wikipedia', name: 'Wikipedia' },
+                      { id: "duckduckgo", name: "DuckDuckGo" },
+                      { id: "google", name: "Google" },
+                      { id: "github", name: "GitHub" },
+                      { id: "youtube", name: "YouTube" },
+                      { id: "wikipedia", name: "Wikipedia" },
                     ].map((engine) => {
                       const isSelected = settings.searchEngineId === engine.id;
                       return (
-                        <button
+                        <motion.button
                           key={engine.id}
-                          onClick={() => updateSettingField('searchEngineId', engine.id)}
-                          className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-all cursor-pointer ${
+                          whileHover={BTN_HOVER}
+                          whileTap={BTN_TAP}
+                          transition={BTN_SPRING}
+                          onClick={() =>
+                            updateSettingField("searchEngineId", engine.id)
+                          }
+                          className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-colors cursor-pointer ${
                             isSelected
-                              ? 'bg-neutral-900 text-white font-bold'
-                              : 'border-neutral-900 text-neutral-500 hover:text-neutral-400'
+                              ? "bg-neutral-900 text-white font-bold"
+                              : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
                           }`}
                           style={{
-                            borderColor: isSelected ? currentTheme.accent : undefined,
+                            borderColor: isSelected
+                              ? currentTheme.accent
+                              : undefined,
                           }}
                         >
                           {engine.name}
-                        </button>
+                        </motion.button>
                       );
                     })}
                   </div>
@@ -755,19 +913,15 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={settings.timeFormat24h}
-                      onChange={(e) => updateSettingField('timeFormat24h', e.target.checked)}
+                      onChange={(e) =>
+                        updateSettingField("timeFormat24h", e.target.checked)
+                      }
                       className="sr-only"
                     />
-                    <div
-                      className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{
-                        backgroundColor: settings.timeFormat24h ? currentTheme.accent : '#262626',
-                      }}
-                    >
-                      <div
-                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.timeFormat24h ? 'translate-x-4' : 'translate-x-0'}`}
-                      />
-                    </div>
+                    <ToggleTrack
+                      checked={settings.timeFormat24h}
+                      accent={currentTheme.accent}
+                    />
                   </label>
 
                   {/* Seconds clock toggle */}
@@ -776,19 +930,15 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={settings.showSeconds}
-                      onChange={(e) => updateSettingField('showSeconds', e.target.checked)}
+                      onChange={(e) =>
+                        updateSettingField("showSeconds", e.target.checked)
+                      }
                       className="sr-only"
                     />
-                    <div
-                      className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{
-                        backgroundColor: settings.showSeconds ? currentTheme.accent : '#262626',
-                      }}
-                    >
-                      <div
-                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showSeconds ? 'translate-x-4' : 'translate-x-0'}`}
-                      />
-                    </div>
+                    <ToggleTrack
+                      checked={settings.showSeconds}
+                      accent={currentTheme.accent}
+                    />
                   </label>
 
                   {/* Binary Clock indicator toggle */}
@@ -797,19 +947,15 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={settings.showHexClock}
-                      onChange={(e) => updateSettingField('showHexClock', e.target.checked)}
+                      onChange={(e) =>
+                        updateSettingField("showHexClock", e.target.checked)
+                      }
                       className="sr-only"
                     />
-                    <div
-                      className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{
-                        backgroundColor: settings.showHexClock ? currentTheme.accent : '#262626',
-                      }}
-                    >
-                      <div
-                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showHexClock ? 'translate-x-4' : 'translate-x-0'}`}
-                      />
-                    </div>
+                    <ToggleTrack
+                      checked={settings.showHexClock}
+                      accent={currentTheme.accent}
+                    />
                   </label>
 
                   {/* ICMP Packet Logging Toggle */}
@@ -818,21 +964,15 @@ export default function App() {
                     <input
                       type="checkbox"
                       checked={settings.techPingDelaySim}
-                      onChange={(e) => updateSettingField('techPingDelaySim', e.target.checked)}
+                      onChange={(e) =>
+                        updateSettingField("techPingDelaySim", e.target.checked)
+                      }
                       className="sr-only"
                     />
-                    <div
-                      className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{
-                        backgroundColor: settings.techPingDelaySim
-                          ? currentTheme.accent
-                          : '#262626',
-                      }}
-                    >
-                      <div
-                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.techPingDelaySim ? 'translate-x-4' : 'translate-x-0'}`}
-                      />
-                    </div>
+                    <ToggleTrack
+                      checked={settings.techPingDelaySim}
+                      accent={currentTheme.accent}
+                    />
                   </label>
 
                   {/* Work Hours Progress Tracker Toggle */}
@@ -845,31 +985,23 @@ export default function App() {
                         setSettings((prev) => ({
                           ...prev,
                           showWorkProgress: e.target.checked,
-                          workStart: prev.workStart || '09:00',
-                          workEnd: prev.workEnd || '17:00',
+                          workStart: prev.workStart || "09:00",
+                          workEnd: prev.workEnd || "17:00",
                         }));
                         addLog(
-                          'SYS',
-                          'success',
+                          "SYS",
+                          "success",
                           e.target.checked
-                            ? 'Work tracker activated: adjust shift times below'
-                            : 'Work tracker deactivated',
+                            ? "Work tracker activated: adjust shift times below"
+                            : "Work tracker deactivated",
                         );
                       }}
                       className="sr-only"
                     />
-                    <div
-                      className="w-8 h-4 rounded-full p-0.5 transition-all"
-                      style={{
-                        backgroundColor: settings.showWorkProgress
-                          ? currentTheme.accent
-                          : '#262626',
-                      }}
-                    >
-                      <div
-                        className={`w-3 h-3 rounded-full bg-black transition-all ${settings.showWorkProgress ? 'translate-x-4' : 'translate-x-0'}`}
-                      />
-                    </div>
+                    <ToggleTrack
+                      checked={!!settings.showWorkProgress}
+                      accent={currentTheme.accent}
+                    />
                   </label>
 
                   {settings.showWorkProgress && (
@@ -883,8 +1015,10 @@ export default function App() {
                         </span>
                         <input
                           type="text"
-                          value={settings.workStart || '09:00'}
-                          onChange={(e) => updateSettingField('workStart', e.target.value)}
+                          value={settings.workStart || "09:00"}
+                          onChange={(e) =>
+                            updateSettingField("workStart", e.target.value)
+                          }
                           className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
                         />
                       </div>
@@ -894,8 +1028,10 @@ export default function App() {
                         </span>
                         <input
                           type="text"
-                          value={settings.workEnd || '17:00'}
-                          onChange={(e) => updateSettingField('workEnd', e.target.value)}
+                          value={settings.workEnd || "17:00"}
+                          onChange={(e) =>
+                            updateSettingField("workEnd", e.target.value)
+                          }
                           className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
                         />
                       </div>
@@ -909,12 +1045,16 @@ export default function App() {
                   id="system-telemetry-backup-wrapper"
                 >
                   <span className="text-[11px] text-neutral-400 uppercase tracking-widest block font-bold flex items-center gap-1.5">
-                    <FolderSync className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
+                    <FolderSync
+                      className="w-3.5 h-3.5"
+                      style={{ color: currentTheme.accent }}
+                    />
                     TELEMETRY CALIBRATION BACKUP
                   </span>
                   <p className="text-[10px] text-neutral-500 leading-normal">
-                    Export or import customized system nodes (bookmarks) and setup parameters —
-                    copy/paste the JSON below, or download/import it as a file.
+                    Export or import customized system nodes (bookmarks) and
+                    setup parameters — copy/paste the JSON below, or
+                    download/import it as a file.
                   </p>
 
                   <textarea
@@ -929,43 +1069,59 @@ export default function App() {
                   />
 
                   <div className="grid grid-cols-2 gap-2">
-                    <button
+                    <motion.button
+                      whileHover={BTN_HOVER}
+                      whileTap={BTN_TAP}
+                      transition={BTN_SPRING}
                       type="button"
                       onClick={() => {
                         if (telemetryRef.current) {
-                          navigator.clipboard.writeText(telemetryRef.current.value);
+                          navigator.clipboard.writeText(
+                            telemetryRef.current.value,
+                          );
                           addLog(
-                            'SYS',
-                            'success',
-                            'Telemetry configuration backup string copied to clipboard',
+                            "SYS",
+                            "success",
+                            "Telemetry configuration backup string copied to clipboard",
                           );
                         }
                       }}
-                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-colors text-center select-none"
                     >
                       Copy Telemetry
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={BTN_HOVER}
+                      whileTap={BTN_TAP}
+                      transition={BTN_SPRING}
                       type="button"
-                      onClick={() => applyBackupPayload(telemetryRef.current?.value || '')}
-                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                      onClick={() =>
+                        applyBackupPayload(telemetryRef.current?.value || "")
+                      }
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-colors text-center select-none"
                     >
                       Restore System
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={BTN_HOVER}
+                      whileTap={BTN_TAP}
+                      transition={BTN_SPRING}
                       type="button"
                       onClick={handleDownloadBackup}
-                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-colors text-center select-none"
                     >
                       Download File
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={BTN_HOVER}
+                      whileTap={BTN_TAP}
+                      transition={BTN_SPRING}
                       type="button"
                       onClick={() => backupFileInputRef.current?.click()}
-                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
+                      className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-colors text-center select-none"
                     >
                       Import File
-                    </button>
+                    </motion.button>
                     <input
                       ref={backupFileInputRef}
                       type="file"
@@ -979,8 +1135,8 @@ export default function App() {
                     <div
                       className={`text-[10px] font-mono px-2 py-1.5 rounded border ${
                         telemetryStatus.ok
-                          ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5'
-                          : 'border-rose-500/30 text-rose-400 bg-rose-500/5'
+                          ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/5"
+                          : "border-rose-500/30 text-rose-400 bg-rose-500/5"
                       }`}
                       role="status"
                     >
@@ -991,12 +1147,15 @@ export default function App() {
               </div>
 
               {/* Close / Return safe button */}
-              <button
+              <motion.button
+                whileHover={BTN_HOVER}
+                whileTap={BTN_TAP}
+                transition={BTN_SPRING}
                 onClick={() => setIsSettingsOpen(false)}
-                className={`w-full p-2 bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-bold hover:text-white transition-all text-xs rounded-lg uppercase tracking-wider cursor-pointer mt-6 select-none`}
+                className={`w-full p-2 bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-bold hover:text-white transition-colors text-xs rounded-lg uppercase tracking-wider cursor-pointer mt-6 select-none`}
               >
                 Sync adjustments
-              </button>
+              </motion.button>
             </motion.div>
           </div>
         )}
