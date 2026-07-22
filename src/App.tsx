@@ -5,8 +5,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Cpu, X, Globe, User, Palette, Eye, ShieldCheck, Heart, Terminal, FolderSync } from 'lucide-react';
+import { Settings, Cpu, X, Globe, User, Palette, Eye, Terminal, FolderSync } from 'lucide-react';
 import { PinnedSite, UserSettings, SystemLog, SystemTheme } from './types';
+import { readLocal, readSync, write } from './lib/storage';
 import NetworkBackground from './components/NetworkBackground';
 import FuturisticClock from './components/FuturisticClock';
 import SearchConsole from './components/SearchConsole';
@@ -117,49 +118,53 @@ const DEFAULT_SETTINGS: UserSettings = {
 export default function App() {
   const telemetryRef = useRef<HTMLTextAreaElement>(null);
   const [settings, setSettings] = useState<UserSettings>(() => {
-    try {
-      const stored = localStorage.getItem('netgrid_settings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Force duckduckgo if the stored default is old 'google' or missing
-        if (parsed.searchEngineId === 'google') {
-          parsed.searchEngineId = 'duckduckgo';
-        }
-        return parsed;
-      }
-      return DEFAULT_SETTINGS;
-    } catch {
-      return DEFAULT_SETTINGS;
+    const parsed = readLocal<UserSettings>('netgrid_settings', DEFAULT_SETTINGS);
+    // Force duckduckgo if the stored default is old 'google' or missing
+    if (parsed.searchEngineId === 'google') {
+      parsed.searchEngineId = 'duckduckgo';
     }
+    return parsed;
   });
 
   const [pinnedSites, setPinnedSites] = useState<PinnedSite[]>(() => {
-    try {
-      const stored = localStorage.getItem('netgrid_pinned_sites');
-      if (stored) {
-        const parsed = JSON.parse(stored) as PinnedSite[];
-        // Filter out ChatGPT / Gemini standard bookmarks to avoid duplication
-        return parsed.filter(s => s.id !== 'chatgpt' && s.id !== 'gemini');
-      }
-      return DEFAULT_SITES;
-    } catch {
-      return DEFAULT_SITES;
-    }
+    const parsed = readLocal<PinnedSite[]>('netgrid_pinned_sites', DEFAULT_SITES);
+    // Filter out ChatGPT / Gemini standard bookmarks to avoid duplication
+    return parsed.filter((s) => s.id !== 'chatgpt' && s.id !== 'gemini');
   });
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [isLogPanelOpen, setIsLogPanelOpen] = useState(false);
+  const [telemetryStatus, setTelemetryStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [appUrl, setAppUrl] = useState('');
-  const [localIp, setLocalIp] = useState('192.168.1.104');
+  const [localIp, setLocalIp] = useState<string | null>(null);
 
-  // Auto-save settings when updated
+  // Pull the latest chrome.storage.sync copy (if any) shortly after the instant
+  // local-cache paint, so edits made on another signed-in device show up here too.
   useEffect(() => {
-    localStorage.setItem('netgrid_settings', JSON.stringify(settings));
+    let cancelled = false;
+    readSync(['netgrid_settings', 'netgrid_pinned_sites']).then((synced) => {
+      if (cancelled) return;
+      if (synced.netgrid_settings) {
+        setSettings((prev) => ({ ...prev, ...(synced.netgrid_settings as UserSettings) }));
+      }
+      if (Array.isArray(synced.netgrid_pinned_sites)) {
+        setPinnedSites(synced.netgrid_pinned_sites as PinnedSite[]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Auto-save settings when updated (mirrors to localStorage + chrome.storage.sync)
+  useEffect(() => {
+    write('netgrid_settings', settings);
   }, [settings]);
 
-  // Auto-save pinned sites when updated
+  // Auto-save pinned sites when updated (mirrors to localStorage + chrome.storage.sync)
   useEffect(() => {
-    localStorage.setItem('netgrid_pinned_sites', JSON.stringify(pinnedSites));
+    write('netgrid_pinned_sites', pinnedSites);
   }, [pinnedSites]);
 
   // Sync state to telemetry text area ref when state updates
@@ -387,11 +392,24 @@ export default function App() {
       {/* Footer Status Bar from Elegant Dark guidelines */}
       <footer className="w-full max-w-none px-6 sm:px-10 py-3 border-t border-neutral-800/40 mt-3 sm:mt-4 flex justify-between items-center text-[10.5px] uppercase tracking-[0.25em] text-neutral-400 z-10 font-mono">
         <div className="flex gap-3 sm:gap-6 font-medium">
-          <span>Local IP: {localIp}</span>
+          <span>Local IP: {localIp ?? 'Unavailable'}</span>
           <span className="text-neutral-805 hidden sm:inline">|</span>
           <span className="hidden sm:inline">Gateway: Connected</span>
         </div>
         <div className="flex gap-3 items-center font-medium">
+          <button
+            onClick={() => setIsLogPanelOpen((prev) => !prev)}
+            aria-label={isLogPanelOpen ? 'Hide system log' : 'Show system log'}
+            aria-expanded={isLogPanelOpen}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-all cursor-pointer normal-case tracking-normal ${
+              isLogPanelOpen
+                ? 'border-neutral-700 text-white bg-neutral-900'
+                : 'border-transparent text-neutral-500 hover:text-neutral-300'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span className="text-[10px] uppercase tracking-wider hidden sm:inline">System Log</span>
+          </button>
           <div className="flex gap-1.5 items-center">
             <div className="w-1.5 h-3 rounded-xs" style={{ backgroundColor: currentTheme.accent }} />
             <div className="w-1.5 h-3 rounded-xs" style={{ backgroundColor: currentTheme.accent }} />
@@ -402,6 +420,58 @@ export default function App() {
           <span className="text-neutral-300">Secure Node Session Active</span>
         </div>
       </footer>
+
+      {/* Collapsible System Log Panel — surfaces the telemetry events already being recorded */}
+      <AnimatePresence>
+        {isLogPanelOpen && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 20, opacity: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+            className="fixed bottom-3 right-3 sm:right-5 z-40 w-[calc(100%-1.5rem)] sm:w-96 max-h-64 bg-neutral-950/95 border border-neutral-800 rounded-xl shadow-2xl backdrop-blur-md font-mono overflow-hidden flex flex-col"
+            id="system-log-panel"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-900">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-400 font-bold flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5" />
+                System Log
+              </span>
+              <button
+                onClick={() => setIsLogPanelOpen(false)}
+                aria-label="Close system log"
+                className="p-1 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto scrollbar-thin px-3 py-2 space-y-1 text-[10.5px]">
+              {logs.length === 0 && (
+                <div className="text-neutral-600 py-4 text-center">No events recorded yet.</div>
+              )}
+              {logs.map((log) => (
+                <div key={log.id} className="flex items-start gap-2 text-neutral-400">
+                  <span className="text-neutral-600 shrink-0">{log.timestamp}</span>
+                  <span
+                    className={`shrink-0 font-bold ${
+                      log.type === 'success'
+                        ? 'text-emerald-400'
+                        : log.type === 'warning'
+                        ? 'text-amber-400'
+                        : log.type === 'packet'
+                        ? 'text-cyan-400'
+                        : 'text-neutral-500'
+                    }`}
+                  >
+                    [{log.module}]
+                  </span>
+                  <span className="text-neutral-300 break-words">{log.message}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Slide-out Terminal Settings Drawer Panel */}
       <AnimatePresence>
@@ -431,6 +501,7 @@ export default function App() {
                   </span>
                   <button
                     onClick={() => setIsSettingsOpen(false)}
+                    aria-label="Close system calibration panel"
                     className="p-1 px-1.5 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
                   >
                     <X className="w-4 h-4" />
@@ -563,7 +634,7 @@ export default function App() {
                       type="checkbox"
                       checked={settings.timeFormat24h}
                       onChange={(e) => updateSettingField('timeFormat24h', e.target.checked)}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div 
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
@@ -580,7 +651,7 @@ export default function App() {
                       type="checkbox"
                       checked={settings.showSeconds}
                       onChange={(e) => updateSettingField('showSeconds', e.target.checked)}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div 
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
@@ -597,7 +668,7 @@ export default function App() {
                       type="checkbox"
                       checked={settings.showHexClock}
                       onChange={(e) => updateSettingField('showHexClock', e.target.checked)}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div 
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
@@ -614,7 +685,7 @@ export default function App() {
                       type="checkbox"
                       checked={settings.techPingDelaySim}
                       onChange={(e) => updateSettingField('techPingDelaySim', e.target.checked)}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div 
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
@@ -631,25 +702,19 @@ export default function App() {
                       type="checkbox"
                       checked={!!settings.showWorkProgress}
                       onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        if (isChecked) {
-                          const start = prompt('Enter shift start time (24h format, e.g., 09:00):', settings.workStart || '09:00');
-                          if (start === null) return;
-                          const end = prompt('Enter shift end time (24h format, e.g., 17:00):', settings.workEnd || '17:00');
-                          if (end === null) return;
-                          
-                          setSettings((prev) => ({
-                            ...prev,
-                            showWorkProgress: true,
-                            workStart: start,
-                            workEnd: end
-                          }));
-                          addLog('SYS', 'success', `Work tracker activated: ${start} to ${end}`);
-                        } else {
-                          updateSettingField('showWorkProgress', false);
-                        }
+                        setSettings((prev) => ({
+                          ...prev,
+                          showWorkProgress: e.target.checked,
+                          workStart: prev.workStart || '09:00',
+                          workEnd: prev.workEnd || '17:00',
+                        }));
+                        addLog(
+                          'SYS',
+                          'success',
+                          e.target.checked ? 'Work tracker activated: adjust shift times below' : 'Work tracker deactivated'
+                        );
                       }}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div 
                       className="w-8 h-4 rounded-full p-0.5 transition-all"
@@ -721,32 +786,44 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         const inputVal = telemetryRef.current?.value;
-                        if (inputVal) {
-                          try {
-                            const parsed = JSON.parse(inputVal);
-                            if (parsed && typeof parsed === 'object') {
-                              if (parsed.settings) {
-                                setSettings((prev) => ({ ...prev, ...parsed.settings }));
-                              }
-                              if (parsed.pinnedSites && Array.isArray(parsed.pinnedSites)) {
-                                setPinnedSites(parsed.pinnedSites);
-                              }
-                              addLog('SYS', 'success', 'System backup telemetry successfully restored');
-                              alert('System backup telemetry successfully restored!');
-                            } else {
-                              alert('Telemetry restore failed: Invalid configuration layout.');
+                        if (!inputVal) return;
+                        try {
+                          const parsed = JSON.parse(inputVal);
+                          if (parsed && typeof parsed === 'object') {
+                            if (parsed.settings) {
+                              setSettings((prev) => ({ ...prev, ...parsed.settings }));
                             }
-                          } catch (err) {
-                            addLog('SYS', 'warning', 'Restoration sequence failed: Invalid segment format');
-                            alert('Restoration failed: Please paste a valid backup JSON format.');
+                            if (parsed.pinnedSites && Array.isArray(parsed.pinnedSites)) {
+                              setPinnedSites(parsed.pinnedSites);
+                            }
+                            addLog('SYS', 'success', 'System backup telemetry successfully restored');
+                            setTelemetryStatus({ ok: true, message: 'Backup restored successfully.' });
+                          } else {
+                            setTelemetryStatus({ ok: false, message: 'Invalid configuration layout.' });
                           }
+                        } catch (err) {
+                          addLog('SYS', 'warning', 'Restoration sequence failed: Invalid segment format');
+                          setTelemetryStatus({ ok: false, message: 'Please paste a valid backup JSON format.' });
                         }
+                        setTimeout(() => setTelemetryStatus(null), 4000);
                       }}
                       className="p-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 hover:border-neutral-700 text-neutral-300 rounded text-[10px] uppercase font-bold tracking-wider cursor-pointer transition-all text-center select-none"
                     >
                       Restore System
                     </button>
                   </div>
+                  {telemetryStatus && (
+                    <div
+                      className={`text-[10px] font-mono px-2 py-1.5 rounded border ${
+                        telemetryStatus.ok
+                          ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5'
+                          : 'border-rose-500/30 text-rose-400 bg-rose-500/5'
+                      }`}
+                      role="status"
+                    >
+                      {telemetryStatus.message}
+                    </div>
+                  )}
                 </div>
               </div>
 

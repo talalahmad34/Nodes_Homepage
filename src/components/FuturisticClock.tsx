@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Activity, Globe, Wifi, Cpu, ShieldCheck } from 'lucide-react';
 import { UserSettings, SystemLog } from '../types';
@@ -20,34 +20,43 @@ export default function FuturisticClock({ settings, addLog }: FuturisticClockPro
   const [packetRx, setPacketRx] = useState(3894);
   const [cpuUsageSim, setCpuUsageSim] = useState(18);
 
+  // Keep the latest settings/addLog available to the interval below without needing
+  // to recreate the interval itself every tick (which previously reset every 250ms).
+  const settingsRef = useRef(settings);
+  const addLogRef = useRef(addLog);
+  useEffect(() => {
+    settingsRef.current = settings;
+    addLogRef.current = addLog;
+  }, [settings, addLog]);
+
   useEffect(() => {
     const timer = setInterval(() => {
-      const prevSeconds = time.getSeconds();
-      const nextTime = new Date();
-      setTime(nextTime);
+      setTime((prevTime) => {
+        const nextTime = new Date();
 
-      // Trigger automatic telemetry packets inside logs
-      if (nextTime.getSeconds() !== prevSeconds) {
-        if (nextTime.getSeconds() % 15 === 0) {
+        // Trigger automatic telemetry packets inside logs
+        if (nextTime.getSeconds() !== prevTime.getSeconds() && nextTime.getSeconds() % 15 === 0) {
           const rndPing = Math.floor(Math.random() * 8) + 8;
           setPingSim(rndPing);
           setCpuUsageSim(Math.floor(Math.random() * 15) + 10);
           setPacketTx((prev) => prev + Math.floor(Math.random() * 5) + 1);
           setPacketRx((prev) => prev + Math.floor(Math.random() * 12) + 2);
 
-          if (settings.techPingDelaySim) {
-            addLog(
+          if (settingsRef.current.techPingDelaySim) {
+            addLogRef.current(
               'NET',
               'packet',
               `ICMP Echo Request: seq=${nextTime.getSeconds()} size=64 bytes rtt=${rndPing}ms`
             );
           }
         }
-      }
+
+        return nextTime;
+      });
     }, 250);
 
     return () => clearInterval(timer);
-  }, [time, settings.techPingDelaySim, addLog]);
+  }, []);
 
   // Format main clock numbers
   const hours = time.getHours();
