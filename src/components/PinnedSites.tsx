@@ -581,12 +581,12 @@ export default function PinnedSites({
               />
 
               <div
-                className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-950/40 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
+                className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
                   isDraggedIdx
-                    ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/80"
+                    ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/60"
                     : isHoveredIdx
-                      ? `border-neutral-500 scale-102 bg-neutral-900/40 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
-                      : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/10`
+                      ? `border-neutral-500 scale-102 bg-neutral-900/35 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
+                      : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/35`
                 }`}
                 onClick={() => handleCardClick(site.id, site.url)}
                 onAuxClick={(e) => {

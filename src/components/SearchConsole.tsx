@@ -253,7 +253,7 @@ export default function SearchConsole({
             : undefined
         }
       >
-        <div className="relative shrink-0" ref={engineMenuRef}>
+        <div className="flex items-center shrink-0" ref={engineMenuRef}>
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.95 }}
@@ -262,7 +262,7 @@ export default function SearchConsole({
             onClick={() => setIsEngineMenuOpen((prev) => !prev)}
             aria-label={`Change search engine (currently ${activeEngine.name})`}
             aria-expanded={isEngineMenuOpen}
-            className="flex items-center text-neutral-400 mr-3 select-none hover:text-neutral-200 transition-colors cursor-pointer"
+            className="flex items-center text-neutral-400 mr-3 select-none hover:text-neutral-200 transition-colors cursor-pointer shrink-0"
           >
             <Terminal className="w-4.5 h-4.5 mr-1.5 text-neutral-500" />
             <span className="text-xs font-mono tracking-wider font-bold text-neutral-400 uppercase">
@@ -273,35 +273,44 @@ export default function SearchConsole({
             />
           </motion.button>
 
+          {/* Expands horizontally inside the search box itself (pushing the input over)
+              instead of overlaying a dropdown below — avoids ever overlapping other
+              sections of the page regardless of viewport width. */}
           <AnimatePresence>
             {isEngineMenuOpen && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="absolute top-full left-0 mt-2 w-44 bg-neutral-950 border border-neutral-800 rounded-lg shadow-2xl overflow-hidden z-20 font-mono"
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: "auto", opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 340, damping: 32 }}
+                className="flex items-center gap-1 overflow-hidden pr-3 mr-1 border-r border-neutral-800 font-mono"
                 id="search-engine-picker-menu"
               >
-                {SEARCH_ENGINES.map((engine) => (
-                  <motion.button
-                    key={engine.id}
-                    whileHover={{ scale: 1.03, x: 3 }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={BTN_SPRING}
-                    type="button"
-                    onClick={() => selectEngine(engine)}
-                    className={`w-full text-left px-3 py-2 text-xs uppercase tracking-wide transition-colors cursor-pointer flex items-center justify-between ${
-                      engine.id === activeEngine.id
-                        ? "bg-neutral-900 text-white font-bold"
-                        : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-                    }`}
-                  >
-                    {engine.name}
-                    <span className="text-neutral-600 text-[10px] normal-case">
-                      {engine.shortcut}
-                    </span>
-                  </motion.button>
-                ))}
+                {SEARCH_ENGINES.map((engine) => {
+                  const isActive = engine.id === activeEngine.id;
+                  return (
+                    <motion.button
+                      key={engine.id}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={BTN_SPRING}
+                      type="button"
+                      onClick={() => selectEngine(engine)}
+                      className={`px-2 py-1 rounded-md text-[10px] uppercase tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
+                        isActive
+                          ? "font-bold"
+                          : "text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                      }`}
+                      style={
+                        isActive
+                          ? { backgroundColor: `${accentColor}25`, color: accentColor }
+                          : undefined
+                      }
+                    >
+                      {engine.name}
+                    </motion.button>
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>

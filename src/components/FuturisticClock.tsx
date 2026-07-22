@@ -36,33 +36,38 @@ export default function FuturisticClock({
     addLogRef.current = addLog;
   }, [settings, addLog]);
 
+  // Tracks the last second we fired telemetry for, so the check below doesn't need to
+  // read the previous `time` state — doing that via setTime's updater fired other
+  // components' setState calls (addLog -> App's setLogs) mid-render, which React flags
+  // as invalid and can cause a render pass to be discarded.
+  const lastTelemetrySecondRef = useRef(-1);
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setTime((prevTime) => {
-        const nextTime = new Date();
+      const nextTime = new Date();
+      setTime(nextTime);
 
-        // Trigger automatic telemetry packets inside logs
-        if (
-          nextTime.getSeconds() !== prevTime.getSeconds() &&
-          nextTime.getSeconds() % 15 === 0
-        ) {
-          const rndPing = Math.floor(Math.random() * 8) + 8;
-          setPingSim(rndPing);
-          setCpuUsageSim(Math.floor(Math.random() * 15) + 10);
-          setPacketTx((prev) => prev + Math.floor(Math.random() * 5) + 1);
-          setPacketRx((prev) => prev + Math.floor(Math.random() * 12) + 2);
+      const nextSeconds = nextTime.getSeconds();
+      if (
+        nextSeconds !== lastTelemetrySecondRef.current &&
+        nextSeconds % 15 === 0
+      ) {
+        lastTelemetrySecondRef.current = nextSeconds;
 
-          if (settingsRef.current.techPingDelaySim) {
-            addLogRef.current(
-              "NET",
-              "packet",
-              `ICMP Echo Request: seq=${nextTime.getSeconds()} size=64 bytes rtt=${rndPing}ms`,
-            );
-          }
+        const rndPing = Math.floor(Math.random() * 8) + 8;
+        setPingSim(rndPing);
+        setCpuUsageSim(Math.floor(Math.random() * 15) + 10);
+        setPacketTx((prev) => prev + Math.floor(Math.random() * 5) + 1);
+        setPacketRx((prev) => prev + Math.floor(Math.random() * 12) + 2);
+
+        if (settingsRef.current.techPingDelaySim) {
+          addLogRef.current(
+            "NET",
+            "packet",
+            `ICMP Echo Request: seq=${nextSeconds} size=64 bytes rtt=${rndPing}ms`,
+          );
         }
-
-        return nextTime;
-      });
+      }
     }, 250);
 
     return () => clearInterval(timer);
@@ -271,7 +276,7 @@ export default function FuturisticClock({
 
       {/* Main Glass Clock Face */}
       <div
-        className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border ${colors.border} bg-neutral-900/60 backdrop-blur-md shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
+        className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border ${colors.border} bg-neutral-900/20 backdrop-blur-sm shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
         id="clock-shield"
       >
         {/* Futuristic layout grids inside clock */}

@@ -128,7 +128,7 @@ export default function NetworkBackground({
     const maxParticles =
       bgType === "network" ? 70 : bgType === "grid" ? 100 : 120;
     const connectionDist = 120;
-    const AMBIENT_RUNNER_COUNT = 10;
+    const AMBIENT_RUNNER_COUNT = 32;
 
     const spawnAmbientRunner = (
       width: number,
@@ -260,9 +260,11 @@ export default function NetworkBackground({
       const w = canvas.width;
       const h = canvas.height;
 
-      // Draw subtle background cybergrid lines for "network/grid" types
+      // Draw background cybergrid lines for "network/grid" types — brighter and more
+      // present for "grid" so the circuit board reads as alive even before anything moves.
       if (bgType === "grid" || bgType === "network") {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.015)";
+        const lineAlpha = bgType === "grid" ? 0.05 : 0.015;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${lineAlpha})`;
         ctx.lineWidth = 1;
 
         // Vertical lines
@@ -281,7 +283,8 @@ export default function NetworkBackground({
         }
 
         // Concentric radial coordinate scanlines
-        ctx.strokeStyle = `rgba(${colors.rgb}, 0.012)`;
+        const scanAlpha = bgType === "grid" ? 0.05 : 0.012;
+        ctx.strokeStyle = `rgba(${colors.rgb}, ${scanAlpha})`;
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3, 0, Math.PI * 2);
         ctx.stroke();
@@ -295,13 +298,13 @@ export default function NetworkBackground({
         pulse.radius += pulse.speed;
         pulse.alpha = Math.max(0, 1 - pulse.radius / pulse.maxRadius);
 
-        ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.15})`;
+        ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.35})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(pulse.x, pulse.y, pulse.radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.05})`;
+        ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.12})`;
         ctx.lineWidth = 8;
         ctx.beginPath();
         ctx.arc(pulse.x, pulse.y, pulse.radius, 0, Math.PI * 2);
@@ -485,22 +488,22 @@ export default function NetworkBackground({
           ctx.fill();
         }
 
-        // Dim intersection nodes brighten near the cursor, a passing runner, or a click
-        // ripple — otherwise near-invisible, so the circuit reads as dormant until touched.
+        // Intersection nodes carry a lively baseline glow and brighten further near the
+        // cursor, a passing runner, or a click ripple — busy circuit traffic, not dormant.
         particles.forEach((p) => {
-          let alpha = 0.035;
+          let alpha = 0.16;
 
           if (mouseRef.current.active) {
             const d = Math.hypot(
               p.x - mouseRef.current.x,
               p.y - mouseRef.current.y,
             );
-            if (d < 160) alpha += (1 - d / 160) * 0.32;
+            if (d < 160) alpha += (1 - d / 160) * 0.4;
           }
 
           for (const r of runners) {
             const d = Math.hypot(p.x - r.x, p.y - r.y);
-            if (d < 34) alpha += (1 - d / 34) * 0.55;
+            if (d < 40) alpha += (1 - d / 40) * 0.65;
           }
 
           for (const pulse of pulses) {
@@ -511,7 +514,7 @@ export default function NetworkBackground({
           alpha = Math.min(alpha, 1);
           ctx.fillStyle = `rgba(${colors.rgb}, ${alpha})`;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius + alpha * 1.8, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.radius + alpha * 2.4, 0, Math.PI * 2);
           ctx.fill();
         });
       }
