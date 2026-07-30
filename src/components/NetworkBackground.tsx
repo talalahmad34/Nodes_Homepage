@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useRef } from "react";
+import { onPulse } from "../lib/pulseBus";
 
 interface Particle {
   x: number;
@@ -21,6 +22,17 @@ interface Pulse {
   maxRadius: number;
   speed: number;
   alpha: number;
+}
+
+// A short-lived spark shed behind the cursor as it moves, giving the pointer a
+// comet-like trail on every background variant.
+interface TrailSpark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  radius: number;
 }
 
 // A single light "packet" traveling along the circuit-grid lines — used only by the
@@ -63,6 +75,8 @@ export default function NetworkBackground({
   // Store active circuit runners (grid variant only) — mutated in place so the click
   // handler below (outside the animation effect) can inject new bursts into the same array.
   const runnersRef = useRef<CircuitRunner[]>([]);
+  // Cursor trail sparks, seeded by the pointer-move handler and decayed in the draw loop.
+  const trailRef = useRef<TrailSpark[]>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -124,6 +138,7 @@ export default function NetworkBackground({
     // Mutated in place (never reassigned) so the click handler outside this effect
     // keeps injecting into the exact array instance the draw loop below is reading.
     const runners = runnersRef.current;
+    const trail = trailRef.current;
     let cachedNodeCenters: { x: number; y: number }[] = [];
     const maxParticles =
       bgType === "network" ? 70 : bgType === "grid" ? 100 : 120;
@@ -241,6 +256,46 @@ export default function NetworkBackground({
 
     // Set initial size
     resizeCanvas();
+
+    // Cursor tracking is bound to the window rather than the canvas wrapper: the wrapper
+    // sits beneath the page content, so tile/card hovers would otherwise swallow the
+    // events and the glow + trail would die whenever the pointer crossed any UI element.
+    const handleWindowPointerMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const nextX = e.clientX - rect.left;
+      const nextY = e.clientY - rect.top;
+      const prevX = mouseRef.current.x;
+      const prevY = mouseRef.current.y;
+      const wasActive = mouseRef.current.active;
+
+      mouseRef.current.x = nextX;
+      mouseRef.current.y = nextY;
+      mouseRef.current.active = true;
+
+      // Shed sparks proportional to pointer speed, so a flick leaves a longer comet
+      // than a slow drift. Count is capped so fast sweeps stay cheap.
+      if (!wasActive) return;
+      const dist = Math.hypot(nextX - prevX, nextY - prevY);
+      const sparkCount = Math.min(3, Math.floor(dist / 9));
+      for (let i = 0; i < sparkCount; i++) {
+        trail.push({
+          x: nextX + (Math.random() - 0.5) * 6,
+          y: nextY + (Math.random() - 0.5) * 6,
+          vx: (Math.random() - 0.5) * 1.1,
+          vy: (Math.random() - 0.5) * 1.1,
+          life: 1,
+          radius: 0.9 + Math.random() * 0.9,
+        });
+      }
+      if (trail.length > 90) trail.splice(0, trail.length - 90);
+    };
+
+    const handleWindowPointerLeave = () => {
+      mouseRef.current.active = false;
+    };
+
+    window.addEventListener("mousemove", handleWindowPointerMove);
+    document.addEventListener("mouseleave", handleWindowPointerLeave);
 
     // Watches the pinned-site grid for nodes being added, removed, or reordered
     // (childList changes only — deliberately ignores style/class mutations so that
@@ -578,6 +633,49 @@ export default function NetworkBackground({
         }
       });
 
+      // Cursor comet trail — drifting sparks that fade out, drawn above the
+      // background layers so the pointer always reads as the brightest thing on screen.
+      for (let i = trail.length - 1; i >= 0; i--) {
+        const s = trail[i];
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vx *= 0.94;
+        s.vy *= 0.94;
+        s.life -= 0.026;
+
+        if (s.life <= 0) {
+          trail.splice(i, 1);
+          continue;
+        }
+
+        ctx.fillStyle = `rgba(${colors.rgb}, ${s.life * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius * s.life * 2.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255, 255, 255, ${s.life * 0.85})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius * s.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Soft glow anchored to the cursor itself
+      if (mouseRef.current.active) {
+        const glow = ctx.createRadialGradient(
+          mouseRef.current.x,
+          mouseRef.current.y,
+          0,
+          mouseRef.current.x,
+          mouseRef.current.y,
+          90,
+        );
+        glow.addColorStop(0, `rgba(${colors.rgb}, 0.13)`);
+        glow.addColorStop(1, `rgba(${colors.rgb}, 0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(mouseRef.current.x, mouseRef.current.y, 90, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // Floating data center monitor overlay text
       ctx.fillStyle = "rgba(255, 255, 255, 0.022)";
       ctx.font = '10px "JetBrains Mono", monospace';
@@ -596,46 +694,37 @@ export default function NetworkBackground({
       }
       resizeObserver.disconnect();
       gridMutationObserver.disconnect();
+      window.removeEventListener("mousemove", handleWindowPointerMove);
+      document.removeEventListener("mouseleave", handleWindowPointerLeave);
       if (tileRescanTimer) clearTimeout(tileRescanTimer);
     };
   }, [bgType, colorTheme]);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      mouseRef.current.x = e.clientX - rect.left;
-      mouseRef.current.y = e.clientY - rect.top;
-      mouseRef.current.active = true;
-    }
-  };
+  // Fires a ripple (and, on the grid variant, a four-way circuit surge) at a point given
+  // in viewport coordinates. Shared by direct canvas clicks and by pulses requested from
+  // elsewhere in the UI, e.g. a bookmark tile being activated.
+  const spawnPulseAtClientPoint = React.useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-  const handlePointerLeave = () => {
-    mouseRef.current.active = false;
-  };
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
 
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+      pulsesRef.current.push({
+        x,
+        y,
+        radius: 0,
+        maxRadius: 240,
+        speed: 4,
+        alpha: 1,
+      });
 
-    const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+      if (bgType !== "grid") return;
 
-    // Spawn a wave pulse
-    pulsesRef.current.push({
-      x: clickX,
-      y: clickY,
-      radius: 0,
-      maxRadius: 240,
-      speed: 4,
-      alpha: 1,
-    });
-
-    // On the circuit-grid variant, a click also fires a data burst outward along the
-    // grid lines in all four directions from the nearest intersection — a "power surge".
-    if (bgType === "grid") {
-      const originX = Math.round(clickX / GRID_SPACING) * GRID_SPACING;
-      const originY = Math.round(clickY / GRID_SPACING) * GRID_SPACING;
+      const originX = Math.round(x / GRID_SPACING) * GRID_SPACING;
+      const originY = Math.round(y / GRID_SPACING) * GRID_SPACING;
       const burst: CircuitRunner[] = (["x", "y"] as const).flatMap((axis) =>
         ([1, -1] as const).map((dir) => ({
           x: originX,
@@ -656,15 +745,26 @@ export default function NetworkBackground({
         pool.splice(oldestTemporaryIdx, 1);
       }
       pool.push(...burst);
-    }
+    },
+    [bgType],
+  );
+
+  useEffect(
+    () =>
+      onPulse(({ clientX, clientY }) =>
+        spawnPulseAtClientPoint(clientX, clientY),
+      ),
+    [spawnPulseAtClientPoint],
+  );
+
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    spawnPulseAtClientPoint(e.clientX, e.clientY);
   };
 
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 w-full h-full -z-20 overflow-hidden pointer-events-auto bg-[#050506] select-none"
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
       onClick={handleCanvasClick}
       id="canvas-network-wrapper"
     >

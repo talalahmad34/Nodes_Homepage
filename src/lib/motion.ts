@@ -22,3 +22,8 @@ export const CARD_SPRING = {
   stiffness: 400,
   damping: 28,
 } as const;
+
+// Cursor-following 3D tilt on bookmark tiles. Softer than CARD_SPRING so the card
+// trails the pointer rather than snapping to it.
+export const TILT_MAX_DEG = 7;
+export const TILT_SPRING = { stiffness: 260, damping: 22, mass: 0.4 } as const;

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useSpring } from "motion/react";
 import {
   Plus,
   X,
@@ -24,7 +24,10 @@ import {
   CARD_HOVER,
   CARD_TAP,
   CARD_SPRING,
+  TILT_MAX_DEG,
+  TILT_SPRING,
 } from "../lib/motion";
+import { emitPulse } from "../lib/pulseBus";
 
 // Free, no-key-required favicon lookup service — used for the "Site Favicon" icon option.
 const getFaviconUrl = (rawUrl: string): string => {
@@ -60,6 +63,55 @@ function SiteFavicon({ site }: { site: PinnedSite }) {
   );
 }
 
+// Tilts its contents in 3D toward the cursor, giving the bookmark grid a holographic
+// feel. Rotation is spring-driven off the pointer's offset from the element centre and
+// released back to flat on leave.
+//
+// This deliberately owns *only* the tilt transform: Framer Motion lets either the
+// `animate` prop or `style` motion values drive an element's transform, not both, so the
+// caller's entry/tap animations must live on a separate parent element or the rotation
+// here is silently discarded.
+function TiltCard({
+  disabled,
+  children,
+}: {
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const rotateX = useSpring(0, TILT_SPRING);
+  const rotateY = useSpring(0, TILT_SPRING);
+
+  const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width - 0.5;
+    const py = (e.clientY - rect.top) / rect.height - 0.5;
+    rotateY.set(px * TILT_MAX_DEG * 2);
+    rotateX.set(-py * TILT_MAX_DEG * 2);
+  };
+
+  const handleLeave = () => {
+    rotateX.set(0);
+    rotateY.set(0);
+  };
+
+  return (
+    <motion.div
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      style={{
+        rotateX,
+        rotateY,
+        transformPerspective: 700,
+        transformStyle: "preserve-3d",
+      }}
+      className="h-full w-full"
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 interface PinnedSitesProps {
   settings: UserSettings;
   pinnedSites: PinnedSite[];
@@ -88,6 +140,15 @@ export default function PinnedSites({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<PinnedSite | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Position of the most recent tile activation, used to render the launch burst overlay.
+  // `seq` only has to differ between consecutive launches so AnimatePresence remounts the
+  // burst and replays it, even when the same tile is activated twice.
+  const [launch, setLaunch] = useState<{
+    seq: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const launchSeqRef = React.useRef(0);
   const confirmDeleteTimerRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -350,7 +411,18 @@ export default function PinnedSites({
     closeModal();
   };
 
-  const handleCardClick = (id: string, url: string) => {
+  // Kicks off the visual "packet launch" from a tile: a ripple on the background canvas
+  // at the tile's centre, plus an overlay burst rendered at that point.
+  const launchPacketFrom = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    emitPulse(cx, cy);
+    launchSeqRef.current += 1;
+    setLaunch({ seq: launchSeqRef.current, x: cx, y: cy });
+  };
+
+  const handleCardClick = (e: React.MouseEvent, id: string, url: string) => {
     onUpdateSiteVisits(id);
     addLog(
       "NET",
@@ -358,19 +430,26 @@ export default function PinnedSites({
       `Socket stream forwarding: routing client interface -> ${url}`,
     );
 
-    // Smooth delay for log visualization then redirect
+    launchPacketFrom(e.currentTarget as HTMLElement);
+
+    // Give the launch animation a beat to play before the page navigates away
     setTimeout(() => {
       window.location.href = url;
-    }, 150);
+    }, 380);
   };
 
-  const handleCardMiddleClick = (id: string, url: string) => {
+  const handleCardMiddleClick = (
+    e: React.MouseEvent,
+    id: string,
+    url: string,
+  ) => {
     onUpdateSiteVisits(id);
     addLog(
       "NET",
       "packet",
       `Socket stream forwarding: routing client interface (new tab) -> ${url}`,
     );
+    launchPacketFrom(e.currentTarget as HTMLElement);
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -570,156 +649,160 @@ export default function PinnedSites({
               }}
               onDragLeave={() => setHoveredDragIdx(null)}
             >
-              {/* Floating Holographic Glow Border background */}
-              <div
-                className={`absolute -inset-[1px] rounded-xl bg-gradient-to-r from-transparent to-transparent group-hover:from-neutral-800 group-hover:to-neutral-900 transition-all duration-300 pointer-events-none -z-10`}
-                style={{
-                  boxShadow: isHoveredIdx
-                    ? `0 0 18px rgba(${colors.glowRGB}, 0.25)`
-                    : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`,
-                }}
-              />
+              <TiltCard disabled={isDraggedIdx}>
+                {/* Floating Holographic Glow Border background */}
+                <div
+                  className={`absolute -inset-[1px] rounded-xl bg-gradient-to-r from-transparent to-transparent group-hover:from-neutral-800 group-hover:to-neutral-900 transition-all duration-300 pointer-events-none -z-10`}
+                  style={{
+                    boxShadow: isHoveredIdx
+                      ? `0 0 18px rgba(${colors.glowRGB}, 0.25)`
+                      : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`,
+                  }}
+                />
 
-              <div
-                className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
-                  isDraggedIdx
-                    ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/60"
-                    : isHoveredIdx
-                      ? `border-neutral-500 scale-102 bg-neutral-900/35 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
-                      : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/35`
-                }`}
-                onClick={() => handleCardClick(site.id, site.url)}
-                onAuxClick={(e) => {
-                  if (e.button === 1) {
-                    e.preventDefault();
-                    handleCardMiddleClick(site.id, site.url);
-                  }
-                }}
-              >
-                {/* Tech scanline visual lines within individual bookmark */}
-                <div className="absolute right-0 top-0 h-full w-[2px] bg-gradient-to-b from-transparent via-neutral-800/10 to-transparent" />
-
-                {/* Visual Top Bar decoration */}
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center space-x-1.5 font-mono text-[10px] text-neutral-500">
-                    <span className="text-neutral-600">ID:</span>
-                    <span>0{simIndex}</span>
-                    <span className="text-neutral-600 ml-1.5">PORT:</span>
-                    <span>{simPort}</span>
-                  </div>
-
-                  {/* Settings dropdown / option buttons for modifying bookmarks */}
-                  <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <motion.button
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.85 }}
-                      transition={BTN_SPRING}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(site);
-                      }}
-                      aria-label={`Edit ${site.title}`}
-                      className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.85 }}
-                      transition={BTN_SPRING}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestDelete(site);
-                      }}
-                      aria-label={
-                        confirmDeleteId === site.id
-                          ? `Confirm delete ${site.title}`
-                          : `Delete ${site.title}`
-                      }
-                      title={
-                        confirmDeleteId === site.id
-                          ? "Click again to confirm"
-                          : undefined
-                      }
-                      className={`p-1 rounded transition-colors cursor-pointer ${
-                        confirmDeleteId === site.id
-                          ? "bg-rose-950 text-rose-400 animate-pulse"
-                          : "hover:bg-rose-950 text-neutral-400 hover:text-rose-400"
-                      }`}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </motion.button>
-                  </div>
-                </div>
-
-                {/* Micro logo representation */}
-                <div className="flex items-center space-x-3">
-                  <div
-                    className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-lg border border-neutral-800/60 bg-neutral-900/50 text-sm font-semibold font-mono tracking-wider text-neutral-300 group-hover:text-white group-hover:border-neutral-700 select-none group-shadow transition-all overflow-hidden ${colors.iconGlow}`}
-                  >
-                    {site.iconType === "initials" && site.iconValue}
-                    {site.iconType === "icon" && (
-                      <Globe className="w-4.5 h-4.5 text-neutral-400 group-hover:text-white" />
-                    )}
-                    {site.iconType === "custom" && <SiteFavicon site={site} />}
-                  </div>
-
-                  {/* Bookmark descriptive metadata */}
-                  <div className="flex flex-col min-w-0 pr-1">
-                    <span className="text-sm text-neutral-200 font-semibold font-sans group-hover:text-white transition-colors truncate">
-                      {site.title}
-                    </span>
-                    <span className="text-[11px] font-mono text-neutral-400 truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
-                      {site.url.replace(/^https?:\/\/(www\.)?/, "")}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Base status and tracking coordinates inside connection */}
-                <div className="flex items-center justify-between w-full pt-1">
-                  <div className="flex items-center space-x-1.5">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:animate-ping`}
-                    />
-                    <span className="text-[10px] font-mono text-neutral-500 group-hover:text-neutral-300 transition-colors uppercase">
-                      socket_ok
-                    </span>
-                  </div>
-
-                  {/* Custom Drag Grip Handle Area */}
-                  <div
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setActiveDragId(site.id);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      setActiveDragId(null);
-                    }}
-                    onMouseLeave={(e) => {
-                      e.stopPropagation();
-                      if (draggedIdx === null) {
-                        setActiveDragId(null);
-                      }
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                <div
+                  className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
+                    isDraggedIdx
+                      ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/60"
+                      : isHoveredIdx
+                        ? `border-neutral-500 scale-102 bg-neutral-900/35 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
+                        : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/35`
+                  }`}
+                  onClick={(e) => handleCardClick(e, site.id, site.url)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) {
                       e.preventDefault();
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      handleGripKeyDown(e, site);
-                    }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Reorder ${site.title}. Use arrow keys to move it earlier or later in the grid.`}
-                    className="p-1 px-1.5 rounded bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700/80 hover:bg-neutral-850/80 focus:border-neutral-500 focus:outline-none cursor-grab active:cursor-grabbing transition-all text-neutral-500 hover:text-neutral-300 transform group-hover:scale-105"
-                    title="Hover to Grab & Drag, or focus and use Arrow keys to reorder"
-                  >
-                    <GripVertical className="w-3.5 h-3.5" />
+                      handleCardMiddleClick(e, site.id, site.url);
+                    }
+                  }}
+                >
+                  {/* Tech scanline visual lines within individual bookmark */}
+                  <div className="absolute right-0 top-0 h-full w-[2px] bg-gradient-to-b from-transparent via-neutral-800/10 to-transparent" />
+
+                  {/* Visual Top Bar decoration */}
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center space-x-1.5 font-mono text-[10px] text-neutral-500">
+                      <span className="text-neutral-600">ID:</span>
+                      <span>0{simIndex}</span>
+                      <span className="text-neutral-600 ml-1.5">PORT:</span>
+                      <span>{simPort}</span>
+                    </div>
+
+                    {/* Settings dropdown / option buttons for modifying bookmarks */}
+                    <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <motion.button
+                        whileHover={{ scale: 1.2 }}
+                        whileTap={{ scale: 0.85 }}
+                        transition={BTN_SPRING}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(site);
+                        }}
+                        aria-label={`Edit ${site.title}`}
+                        className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.2 }}
+                        whileTap={{ scale: 0.85 }}
+                        transition={BTN_SPRING}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestDelete(site);
+                        }}
+                        aria-label={
+                          confirmDeleteId === site.id
+                            ? `Confirm delete ${site.title}`
+                            : `Delete ${site.title}`
+                        }
+                        title={
+                          confirmDeleteId === site.id
+                            ? "Click again to confirm"
+                            : undefined
+                        }
+                        className={`p-1 rounded transition-colors cursor-pointer ${
+                          confirmDeleteId === site.id
+                            ? "bg-rose-950 text-rose-400 animate-pulse"
+                            : "hover:bg-rose-950 text-neutral-400 hover:text-rose-400"
+                        }`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* Micro logo representation */}
+                  <div className="flex items-center space-x-3">
+                    <div
+                      className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-lg border border-neutral-800/60 bg-neutral-900/50 text-sm font-semibold font-mono tracking-wider text-neutral-300 group-hover:text-white group-hover:border-neutral-700 select-none group-shadow transition-all overflow-hidden ${colors.iconGlow}`}
+                    >
+                      {site.iconType === "initials" && site.iconValue}
+                      {site.iconType === "icon" && (
+                        <Globe className="w-4.5 h-4.5 text-neutral-400 group-hover:text-white" />
+                      )}
+                      {site.iconType === "custom" && (
+                        <SiteFavicon site={site} />
+                      )}
+                    </div>
+
+                    {/* Bookmark descriptive metadata */}
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <span className="text-sm text-neutral-200 font-semibold font-sans group-hover:text-white transition-colors truncate">
+                        {site.title}
+                      </span>
+                      <span className="text-[11px] font-mono text-neutral-400 truncate mt-0.5 group-hover:text-neutral-300 transition-colors">
+                        {site.url.replace(/^https?:\/\/(www\.)?/, "")}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Base status and tracking coordinates inside connection */}
+                  <div className="flex items-center justify-between w-full pt-1">
+                    <div className="flex items-center space-x-1.5">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:animate-ping`}
+                      />
+                      <span className="text-[10px] font-mono text-neutral-500 group-hover:text-neutral-300 transition-colors uppercase">
+                        socket_ok
+                      </span>
+                    </div>
+
+                    {/* Custom Drag Grip Handle Area */}
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setActiveDragId(site.id);
+                      }}
+                      onMouseUp={(e) => {
+                        e.stopPropagation();
+                        setActiveDragId(null);
+                      }}
+                      onMouseLeave={(e) => {
+                        e.stopPropagation();
+                        if (draggedIdx === null) {
+                          setActiveDragId(null);
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        handleGripKeyDown(e, site);
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Reorder ${site.title}. Use arrow keys to move it earlier or later in the grid.`}
+                      className="p-1 px-1.5 rounded bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700/80 hover:bg-neutral-850/80 focus:border-neutral-500 focus:outline-none cursor-grab active:cursor-grabbing transition-all text-neutral-500 hover:text-neutral-300 transform group-hover:scale-105"
+                      title="Hover to Grab & Drag, or focus and use Arrow keys to reorder"
+                    >
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              </TiltCard>
             </motion.div>
           );
         })}
@@ -731,6 +814,70 @@ export default function PinnedSites({
           <span>No nodes currently registered in the database grid.</span>
         </div>
       )}
+
+      {/* Packet-launch burst: fired from the centre of an activated tile as the
+          navigation is queued, reading as the outbound socket stream leaving the node. */}
+      <AnimatePresence>
+        {launch && (
+          <motion.div
+            key={launch.seq}
+            className="fixed pointer-events-none z-50"
+            style={{ left: launch.x, top: launch.y }}
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.42, ease: "easeOut" }}
+            onAnimationComplete={() => setLaunch(null)}
+          >
+            {/* Expanding shock ring */}
+            <motion.span
+              className="absolute rounded-full border-2"
+              style={{
+                borderColor: `rgba(${colors.glowRGB}, 0.9)`,
+                translateX: "-50%",
+                translateY: "-50%",
+              }}
+              initial={{ width: 12, height: 12, opacity: 0.9 }}
+              animate={{ width: 190, height: 190, opacity: 0 }}
+              transition={{ duration: 0.42, ease: "easeOut" }}
+            />
+            {/* Bright core flash */}
+            <motion.span
+              className="absolute rounded-full"
+              style={{
+                backgroundColor: `rgba(${colors.glowRGB}, 1)`,
+                boxShadow: `0 0 22px 8px rgba(${colors.glowRGB}, 0.6)`,
+                translateX: "-50%",
+                translateY: "-50%",
+              }}
+              initial={{ width: 16, height: 16, opacity: 1 }}
+              animate={{ width: 4, height: 4, opacity: 0 }}
+              transition={{ duration: 0.34, ease: "easeOut" }}
+            />
+            {/* Four packets streaking outward along the axes */}
+            {[
+              [0, -1],
+              [0, 1],
+              [-1, 0],
+              [1, 0],
+            ].map(([dx, dy], i) => (
+              <motion.span
+                key={i}
+                className="absolute w-1.5 h-1.5 rounded-full"
+                style={{
+                  backgroundColor: "#ffffff",
+                  boxShadow: `0 0 10px 3px rgba(${colors.glowRGB}, 0.85)`,
+                  translateX: "-50%",
+                  translateY: "-50%",
+                }}
+                initial={{ x: 0, y: 0, opacity: 1 }}
+                animate={{ x: dx * 130, y: dy * 130, opacity: 0 }}
+                transition={{ duration: 0.42, ease: "easeOut" }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cyber Register / Edit Site Overlay popup modal */}
       <AnimatePresence>

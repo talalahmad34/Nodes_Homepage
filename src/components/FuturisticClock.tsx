@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { Globe, Wifi, Cpu } from "lucide-react";
 import { UserSettings } from "../types";
+import { useAnimatedNumber } from "../lib/useAnimatedNumber";
 
 interface FuturisticClockProps {
   settings: UserSettings;
@@ -72,6 +73,12 @@ export default function FuturisticClock({
 
     return () => clearInterval(timer);
   }, []);
+
+  // Telemetry readouts ease toward each new simulated value rather than jumping.
+  const displayPing = useAnimatedNumber(pingSim);
+  const displayCpu = useAnimatedNumber(cpuUsageSim);
+  const displayTx = useAnimatedNumber(packetTx);
+  const displayRx = useAnimatedNumber(packetRx);
 
   // Format main clock numbers
   const hours = time.getHours();
@@ -258,12 +265,12 @@ export default function FuturisticClock({
         <span className="text-neutral-800">|</span>
         <span className="flex items-center gap-1.5 font-semibold">
           <Cpu className="w-3.5 h-3.5 text-neutral-500" />
-          CPU {cpuUsageSim}%
+          CPU {displayCpu}%
         </span>
         <span className="text-neutral-800">|</span>
         <span className="flex items-center gap-1.5 font-semibold">
           <Wifi className="w-3.5 h-3.5 text-neutral-300" />
-          {pingSim}ms
+          {displayPing}ms
         </span>
       </div>
 
@@ -401,7 +408,7 @@ export default function FuturisticClock({
           <div className="flex flex-col items-end font-mono text-[10px] tracking-wider text-neutral-400 font-medium">
             <span className="text-neutral-500 font-bold">TELEMETRY STATS</span>
             <span className="text-neutral-300 font-mono mt-0.5 leading-none">
-              TX: {packetTx} | RX: {packetRx}
+              TX: {displayTx} | RX: {displayRx}
             </span>
           </div>
         </div>

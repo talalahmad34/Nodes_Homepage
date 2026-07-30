@@ -13,10 +13,24 @@ A premium, minimal New Tab homepage extension featuring a responsive digital clo
 ## ⚡ Core Features
 
 - **Digital Clock & Binary Matrix:** Displays responsive system time alongside real-time hexadecimal representation and optional binary matrix graphs.
-- **Custom Pinned Shortcut Nodes:** Grid launcher for your favorite destinations with customizable network ports, connection labels, and drag-and-drop sorting.
-- **Integrated Search Console:** Directly execute web searches. Supports command routers on the fly (e.g., `/g` for Google, `/d` for DuckDuckGo).
-- **Live System Telemetry:** Live simulation of CPU diagnostics, latency ping metrics, and packet streams to create a dynamic cybernetic vibe.
-- **Dynamic Canvas Backgrounds:** Interactive networking nodes, starfields, or matrix grids that ripple and connect to cursor movement.
+- **Custom Pinned Shortcut Nodes:** Grid launcher for your favorite destinations with customizable network ports, connection labels, and drag-and-drop sorting (or Arrow keys, for keyboard-only reordering).
+- **Integrated Search Console:** Directly execute web searches. Supports command routers on the fly (e.g., `/g` for Google, `/d` for DuckDuckGo), plus an inline engine picker that expands within the search bar.
+- **Live System Telemetry:** Simulated CPU diagnostics, latency ping metrics, and packet streams — with counters that ease between values rather than snapping — to create a dynamic cybernetic vibe.
+- **Dynamic Canvas Backgrounds:** Interactive networking nodes, starfields, or a living circuit-board grid that ripple and connect to cursor movement.
+- **Free Cross-Device Sync:** Settings and pinned nodes sync through `chrome.storage.sync` (built into Chrome, no account or cost), falling back to `localStorage` outside a packaged extension.
+- **Backup & Restore:** Export your configuration as JSON via copy/paste or a downloadable file, and import it back — with structural validation before anything is applied.
+
+---
+
+## ✨ Interactivity
+
+The interface is built to feel physically responsive rather than static:
+
+- **Node launch bursts:** Activating a pinned node fires a shock ring, core flash, and four outbound packets from the tile, rippling into the backdrop canvas — on the circuit-grid backdrop, this surges along the grid lines.
+- **Cursor comet trail:** The pointer sheds fading sparks (denser the faster you move) and carries a soft glow, tracked across the whole page including over cards and tiles.
+- **Holographic tilt:** Node tiles tilt toward the cursor with spring physics and settle back flat on leave.
+- **Frosted glass panels:** The clock face and node tiles are translucent, so the animated backdrop stays visible through them.
+- **Consistent press feedback:** Buttons, toggles, and pickers share spring-based hover/tap presets (`src/lib/motion.ts`) instead of per-element `:hover` colors.
 
 ---
 
@@ -29,8 +43,8 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) installed on your machi
 1. **Clone or navigate to the directory:**
 
    ```bash
-   git clone https://github.com/your-username/nodes-homepage-extension.git
-   cd nodes-homepage-extension
+   git clone https://github.com/talalahmad34/Nodes_Homepage.git
+   cd Nodes_Homepage
    ```
 
 2. **Install dependencies:**
@@ -52,7 +66,7 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) installed on your machi
 2. Enable **Developer mode** using the toggle switch in the top-right corner.
 3. Click the **Load unpacked** button in the top-left corner.
 4. Select the **`dist`** directory inside this project folder:
-   `nodes-homepage-extension/dist`
+   `Nodes_Homepage/dist`
 5. Open a new tab (`Ctrl + T`) to launch your new dashboard!
 
 ---
