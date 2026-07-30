@@ -21,6 +21,11 @@ import {
   Eye,
   Terminal,
   FolderSync,
+  Clock3,
+  Sparkles,
+  ArrowUp,
+  ArrowDown,
+  Check,
 } from "lucide-react";
 import { PinnedSite, UserSettings, SystemLog, SystemTheme } from "./types";
 import { readLocal, readSync, write } from "./lib/storage";
@@ -29,6 +34,7 @@ import FuturisticClock from "./components/FuturisticClock";
 import SearchConsole from "./components/SearchConsole";
 import PinnedSites from "./components/PinnedSites";
 import { BTN_HOVER, BTN_TAP, BTN_SPRING } from "./lib/motion";
+import { ALL_AI_PORTALS, DEFAULT_AI_PORTAL_IDS } from "./lib/aiPortals";
 
 // Shared animated switch visual for the settings drawer toggles — the knob springs
 // across on change and the whole track gives a light hover/press bounce.
@@ -197,7 +203,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   searchEngineId: "duckduckgo",
   showHexClock: true,
   activeBackground: "network",
-  showAnalogOverlay: false,
+  clockStyle: "cyber",
+  aiPortalIds: DEFAULT_AI_PORTAL_IDS,
   techPingDelaySim: true,
   showWorkProgress: false,
   workStart: "09:00",
@@ -215,6 +222,15 @@ export default function App() {
     // Force duckduckgo if the stored default is old 'google' or missing
     if (parsed.searchEngineId === "google") {
       parsed.searchEngineId = "duckduckgo";
+    }
+    // Settings saved before clockStyle/aiPortalIds existed won't have them in
+    // localStorage at all (readLocal returns the raw parsed JSON, not merged with
+    // DEFAULT_SETTINGS).
+    if (!parsed.clockStyle) {
+      parsed.clockStyle = "cyber";
+    }
+    if (!Array.isArray(parsed.aiPortalIds)) {
+      parsed.aiPortalIds = DEFAULT_AI_PORTAL_IDS;
     }
     return parsed;
   });
@@ -375,6 +391,34 @@ export default function App() {
       "success",
       `Configuration calibration updated: ${key} -> ${value}`,
     );
+  };
+
+  // Toggles a model portal in/out of the pinned row; newly enabled ones are appended
+  // to the end so the existing order of everything else never shifts underneath them.
+  const toggleAiPortal = (id: string) => {
+    setSettings((prev) => {
+      const enabled = prev.aiPortalIds.includes(id);
+      const next = enabled
+        ? prev.aiPortalIds.filter((p) => p !== id)
+        : [...prev.aiPortalIds, id];
+      return { ...prev, aiPortalIds: next };
+    });
+    addLog(
+      "SYS",
+      "success",
+      `AI portal node ${settings.aiPortalIds.includes(id) ? "unpinned" : "pinned"}: ${id}`,
+    );
+  };
+
+  const moveAiPortal = (id: string, direction: -1 | 1) => {
+    setSettings((prev) => {
+      const list = [...prev.aiPortalIds];
+      const idx = list.indexOf(id);
+      const target = idx + direction;
+      if (idx === -1 || target < 0 || target >= list.length) return prev;
+      [list[idx], list[target]] = [list[target], list[idx]];
+      return { ...prev, aiPortalIds: list };
+    });
   };
 
   const handleAddSite = (site: Omit<PinnedSite, "id" | "visitCount">) => {
@@ -857,6 +901,125 @@ export default function App() {
                       },
                     )}
                   </div>
+                </div>
+
+                {/* Clock Style Selector */}
+                <div className="space-y-2">
+                  <span className="text-xs text-neutral-400 uppercase tracking-widest block flex items-center gap-1.5 font-bold">
+                    <Clock3 className="w-4 h-4" />
+                    Clock Face Style
+                  </span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(["cyber", "minimal", "analog"] as const).map((style) => {
+                      const isSelected = settings.clockStyle === style;
+                      return (
+                        <motion.button
+                          key={style}
+                          whileHover={BTN_HOVER}
+                          whileTap={BTN_TAP}
+                          transition={BTN_SPRING}
+                          onClick={() =>
+                            updateSettingField("clockStyle", style)
+                          }
+                          className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-colors cursor-pointer ${
+                            isSelected
+                              ? "border-neutral-700 bg-neutral-900 text-white font-bold"
+                              : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
+                          }`}
+                        >
+                          {style}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* AI Model Portal Selector */}
+                <div className="space-y-2">
+                  <span className="text-xs text-neutral-400 uppercase tracking-widest block flex items-center gap-1.5 font-bold">
+                    <Sparkles className="w-4 h-4" />
+                    AI Model Portals
+                  </span>
+                  <p className="text-[10px] text-neutral-500 leading-normal">
+                    Select which model portals appear above the pinned node
+                    grid.
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_AI_PORTALS.map((portal) => {
+                      const isSelected = settings.aiPortalIds.includes(
+                        portal.id,
+                      );
+                      return (
+                        <motion.button
+                          key={portal.id}
+                          whileHover={BTN_HOVER}
+                          whileTap={BTN_TAP}
+                          transition={BTN_SPRING}
+                          onClick={() => toggleAiPortal(portal.id)}
+                          className={`p-2 rounded text-[10.5px] text-left uppercase tracking-wide border transition-colors cursor-pointer flex items-center justify-between gap-1 ${
+                            isSelected
+                              ? "border-neutral-700 bg-neutral-900 text-white font-bold"
+                              : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
+                          }`}
+                        >
+                          {portal.name}
+                          {isSelected && (
+                            <Check
+                              className="w-3 h-3 shrink-0"
+                              style={{ color: currentTheme.accent }}
+                            />
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Reorder pinned portals — arrow buttons instead of drag-and-drop to
+                      stay keyboard-accessible, matching the pinned-node grid's pattern. */}
+                  {settings.aiPortalIds.length > 1 && (
+                    <div className="space-y-1 pt-1">
+                      {settings.aiPortalIds.map((id, idx) => {
+                        const portal = ALL_AI_PORTALS.find((p) => p.id === id);
+                        if (!portal) return null;
+                        return (
+                          <div
+                            key={id}
+                            className="flex items-center justify-between text-[10px] font-mono text-neutral-400 bg-neutral-950 border border-neutral-900 rounded px-2 py-1"
+                          >
+                            <span className="uppercase tracking-wide">
+                              {idx + 1}. {portal.name}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <motion.button
+                                whileHover={{ scale: 1.15 }}
+                                whileTap={{ scale: 0.85 }}
+                                transition={BTN_SPRING}
+                                disabled={idx === 0}
+                                onClick={() => moveAiPortal(id, -1)}
+                                aria-label={`Move ${portal.name} earlier`}
+                                className="p-0.5 rounded hover:bg-neutral-800 disabled:opacity-25 disabled:cursor-not-allowed text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.15 }}
+                                whileTap={{ scale: 0.85 }}
+                                transition={BTN_SPRING}
+                                disabled={
+                                  idx === settings.aiPortalIds.length - 1
+                                }
+                                onClick={() => moveAiPortal(id, 1)}
+                                aria-label={`Move ${portal.name} later`}
+                                className="p-0.5 rounded hover:bg-neutral-800 disabled:opacity-25 disabled:cursor-not-allowed text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </motion.button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Default Search Engine router calibrator */}

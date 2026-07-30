@@ -2,7 +2,7 @@
 
 All notable changes to the **Nodes Homepage Extension** project will be documented in this file.
 
-## [1.5.0] - 2026-07-22
+## [1.5.0] - 2026-07-30
 
 ### Added
 
@@ -10,6 +10,8 @@ All notable changes to the **Nodes Homepage Extension** project will be document
 - **Cursor comet trail and glow**: The pointer now sheds a trail of fading sparks (denser the faster you move) and carries a soft radial glow, on all three backdrop visualizers. Cursor tracking moved from the canvas wrapper to the window, so the trail and glow continue across tiles, cards, and the clock instead of dying wherever page content sat above the canvas.
 - **3D tilt on pinned nodes**: Node tiles now tilt toward the cursor (up to 7°) with spring physics and settle back flat on leave, giving the grid a holographic feel.
 - **Smoothly counting telemetry readouts**: CPU%, latency, and TX/RX packet counters now ease toward each new simulated value via a new `useAnimatedNumber` hook instead of snapping between numbers.
+- **Clock face styles**: The clock now has three selectable styles (Settings → Clock Face Style) — the original data-dense **Cyber** face, a stripped-down **Minimal** face (just the digits and date), and a literal **Analog** face with SVG hands driven by the same clock state.
+- **Configurable AI model portals**: The pinned AI links above the search bar are no longer a fixed set of four. Settings → AI Model Portals now lets you pick from Gemini, ChatGPT, Claude, Qwen, Kimi, DeepSeek, and Grok, and reorder the ones you enable with up/down controls.
 - **CI (for real this time)**: `.github/workflows/ci.yml` now actually exists in the repository. Both the README and the 1.4.0 changelog entry described this workflow, but the file was never committed — so the documented typecheck/lint/format/build gate was not running on any push or pull request.
 
 ### Changed
@@ -20,8 +22,10 @@ All notable changes to the **Nodes Homepage Extension** project will be document
 
 ### Fixed
 
-- `FuturisticClock` was calling other components' state setters (including the parent's `addLog`) from inside `setTime`'s updater function. React flags this as a state update during another component's render and can discard the render pass — the most likely cause of the clock's date header intermittently failing to appear. Telemetry now fires from the interval body, tracking the last-logged second in a ref.
+- **Date header missing the day of month**: `formatFullDate` only requested `weekday`, `year`, and `month` from `Intl.DateTimeFormatOptions` — the day number was never part of the format string, so the header looked unchanged for weeks at a time (e.g. always "THURSDAY, JUL 2026") regardless of the actual date. Added `day: "numeric"`.
+- `FuturisticClock` was calling other components' state setters (including the parent's `addLog`) from inside `setTime`'s updater function. React flags this as a state update during another component's render and can discard the render pass — a second, intermittent contributor to the date header not appearing. Telemetry now fires from the interval body, tracking the last-logged second in a ref.
 - The burst overlay's React key was derived from `Date.now()` during render, an impure call the linter correctly rejects; it now uses a monotonic counter ref.
+- Removed `showAnalogOverlay` from `UserSettings`, a leftover field with a default value that was never read or exposed in any UI. Its slot in the settings shape is now the real `clockStyle` setting.
 
 ## [1.4.0] - 2026-07-21
 

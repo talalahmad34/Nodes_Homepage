@@ -41,7 +41,8 @@ export interface UserSettings {
   searchEngineId: string;
   showHexClock: boolean;
   activeBackground: "network" | "starfield" | "grid";
-  showAnalogOverlay: boolean;
+  clockStyle: "cyber" | "minimal" | "analog";
+  aiPortalIds: string[];
   techPingDelaySim: boolean;
   showWorkProgress?: boolean;
   workStart?: string;

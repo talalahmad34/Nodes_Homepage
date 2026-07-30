@@ -15,6 +15,7 @@ import {
   CARD_TAP,
   CARD_SPRING,
 } from "../lib/motion";
+import { ALL_AI_PORTALS } from "../lib/aiPortals";
 
 interface SearchConsoleProps {
   settings: UserSettings;
@@ -69,37 +70,6 @@ const SEARCH_ENGINES: SearchEngine[] = [
   },
 ];
 
-const AI_PORTALS = [
-  {
-    id: "gemini",
-    name: "Gemini",
-    url: "https://gemini.google.com",
-    desc: "Google Synapse",
-    tag: "v1.5_PRO",
-  },
-  {
-    id: "chatgpt",
-    name: "ChatGPT",
-    url: "https://chatgpt.com",
-    desc: "OpenAI Core",
-    tag: "GPT-4o",
-  },
-  {
-    id: "claude",
-    name: "Claude",
-    url: "https://claude.ai",
-    desc: "Anthropic Hub",
-    tag: "v3.5_SON",
-  },
-  {
-    id: "qwen",
-    name: "Qwen",
-    url: "https://chat.qwenlm.ai",
-    desc: "Neural Matrix",
-    tag: "v2.5_MAX",
-  },
-];
-
 export default function SearchConsole({
   settings,
   updateSettings,
@@ -111,6 +81,13 @@ export default function SearchConsole({
       SEARCH_ENGINES.find((e) => e.id === settings.searchEngineId) ??
       SEARCH_ENGINES[1],
     [settings.searchEngineId],
+  );
+  const activePortals = useMemo(
+    () =>
+      settings.aiPortalIds
+        .map((id) => ALL_AI_PORTALS.find((p) => p.id === id))
+        .filter((p): p is (typeof ALL_AI_PORTALS)[number] => p !== undefined),
+    [settings.aiPortalIds],
   );
   const [isFocused, setIsFocused] = useState(false);
   const [isEngineMenuOpen, setIsEngineMenuOpen] = useState(false);
@@ -303,7 +280,10 @@ export default function SearchConsole({
                       }`}
                       style={
                         isActive
-                          ? { backgroundColor: `${accentColor}25`, color: accentColor }
+                          ? {
+                              backgroundColor: `${accentColor}25`,
+                              color: accentColor,
+                            }
                           : undefined
                       }
                     >
@@ -344,93 +324,95 @@ export default function SearchConsole({
       </form>
 
       {/* Dedicated Pinned AI Infrastructure Sections */}
-      <div
-        className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10"
-        id="dedicated-ai-terminals-wrapper"
-      >
-        {AI_PORTALS.map((portal) => {
-          return (
-            <motion.a
-              key={portal.id}
-              whileHover={{ ...CARD_HOVER, transition: CARD_SPRING }}
-              whileTap={{ ...CARD_TAP, transition: CARD_SPRING }}
-              href={portal.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() =>
-                addLog(
-                  "EXT",
-                  "info",
-                  `Direct linkage: Routed telemetry query to ${portal.name} node`,
-                )
-              }
-              onMouseMove={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                e.currentTarget.style.setProperty(
-                  "--mouse-x",
-                  `${e.clientX - rect.left}px`,
-                );
-                e.currentTarget.style.setProperty(
-                  "--mouse-y",
-                  `${e.clientY - rect.top}px`,
-                );
-              }}
-              className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-colors duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
-              style={
-                {
-                  "--hover-glow": accentColor,
-                  "--mouse-x": "50%",
-                  "--mouse-y": "50%",
-                } as React.CSSProperties
-              }
-            >
-              {/* Dynamic theme mouse spotlight glow when hovered */}
-              <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                style={{
-                  background: `radial-gradient(110px circle at var(--mouse-x) var(--mouse-y), ${accentColor}24, transparent 80%)`,
+      {activePortals.length > 0 && (
+        <div
+          className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10"
+          id="dedicated-ai-terminals-wrapper"
+        >
+          {activePortals.map((portal) => {
+            return (
+              <motion.a
+                key={portal.id}
+                whileHover={{ ...CARD_HOVER, transition: CARD_SPRING }}
+                whileTap={{ ...CARD_TAP, transition: CARD_SPRING }}
+                href={portal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  addLog(
+                    "EXT",
+                    "info",
+                    `Direct linkage: Routed telemetry query to ${portal.name} node`,
+                  )
+                }
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  e.currentTarget.style.setProperty(
+                    "--mouse-x",
+                    `${e.clientX - rect.left}px`,
+                  );
+                  e.currentTarget.style.setProperty(
+                    "--mouse-y",
+                    `${e.clientY - rect.top}px`,
+                  );
                 }}
-              />
+                className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-colors duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
+                style={
+                  {
+                    "--hover-glow": accentColor,
+                    "--mouse-x": "50%",
+                    "--mouse-y": "50%",
+                  } as React.CSSProperties
+                }
+              >
+                {/* Dynamic theme mouse spotlight glow when hovered */}
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  style={{
+                    background: `radial-gradient(110px circle at var(--mouse-x) var(--mouse-y), ${accentColor}24, transparent 80%)`,
+                  }}
+                />
 
-              {/* Dynamic theme glow when hovered */}
-              <div
-                className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-300"
-                style={{
-                  backgroundImage: `radial-gradient(circle at 100% 100%, ${accentColor}1A, transparent)`,
-                }}
-              />
+                {/* Dynamic theme glow when hovered */}
+                <div
+                  className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-300"
+                  style={{
+                    backgroundImage: `radial-gradient(circle at 100% 100%, ${accentColor}1A, transparent)`,
+                  }}
+                />
 
-              <div className="space-y-0.5 relative z-10 group-hover:translate-x-1.5 transition-transform duration-300">
-                <div className="flex items-center gap-1.5 font-mono">
-                  <Sparkles
-                    className="w-3.5 h-3.5 text-neutral-500 group-hover:text-[var(--hover-glow)] transition-colors duration-300 shrink-0"
-                    style={{ color: accentColor }}
-                  />
-                  <span className="text-xs font-bold tracking-wider text-neutral-200 group-hover:text-white transition-colors duration-300 uppercase">
-                    {portal.name}
+                <div className="space-y-0.5 relative z-10 group-hover:translate-x-1.5 transition-transform duration-300">
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <Sparkles
+                      className="w-3.5 h-3.5 text-neutral-500 group-hover:text-[var(--hover-glow)] transition-colors duration-300 shrink-0"
+                      style={{ color: accentColor }}
+                    />
+                    <span className="text-xs font-bold tracking-wider text-neutral-200 group-hover:text-white transition-colors duration-300 uppercase">
+                      {portal.name}
+                    </span>
+                  </div>
+                  <div className="text-[9.5px] text-neutral-500 tracking-normal font-mono group-hover:text-neutral-400 transition-colors duration-300 leading-tight">
+                    {portal.desc}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end justify-between h-full min-h-[34px] relative z-10 font-mono text-[8px] tracking-widest shrink-0">
+                  <span className="px-1.5 py-0.5 rounded border border-neutral-800/60 bg-neutral-950/80 text-neutral-500 text-xxs scale-90 origin-top-right uppercase font-semibold">
+                    {portal.tag}
+                  </span>
+                  <span className="flex items-center gap-1 text-[8px] text-neutral-600 scale-90 origin-bottom-right group-hover:text-[var(--hover-glow)] transition-all">
+                    <span
+                      className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"
+                      style={{ backgroundColor: accentColor }}
+                    />
+                    LINK
                   </span>
                 </div>
-                <div className="text-[9.5px] text-neutral-500 tracking-normal font-mono group-hover:text-neutral-400 transition-colors duration-300 leading-tight">
-                  {portal.desc}
-                </div>
-              </div>
-
-              <div className="flex flex-col items-end justify-between h-full min-h-[34px] relative z-10 font-mono text-[8px] tracking-widest shrink-0">
-                <span className="px-1.5 py-0.5 rounded border border-neutral-800/60 bg-neutral-950/80 text-neutral-500 text-xxs scale-90 origin-top-right uppercase font-semibold">
-                  {portal.tag}
-                </span>
-                <span className="flex items-center gap-1 text-[8px] text-neutral-600 scale-90 origin-bottom-right group-hover:text-[var(--hover-glow)] transition-all">
-                  <span
-                    className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"
-                    style={{ backgroundColor: accentColor }}
-                  />
-                  LINK
-                </span>
-              </div>
-            </motion.a>
-          );
-        })}
-      </div>
+              </motion.a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
