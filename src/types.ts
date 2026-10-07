@@ -40,7 +40,7 @@ export interface UserSettings {
   showSeconds: boolean;
   searchEngineId: string;
   showHexClock: boolean;
-  activeBackground: "network" | "starfield" | "grid";
+  activeBackground: "orbit" | "starfield" | "grid";
   clockStyle: "cyber" | "minimal" | "analog";
   aiPortalIds: string[];
   techPingDelaySim: boolean;

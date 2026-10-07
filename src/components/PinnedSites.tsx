@@ -422,17 +422,23 @@ export default function PinnedSites({
     setLaunch({ seq: launchSeqRef.current, x: cx, y: cy });
   };
 
+  // Tiles are real links, so the browser handles everything except a plain left
+  // click: Ctrl/Cmd/Shift-click, middle-click and the context menu open the site in
+  // a new tab or window natively, and Enter activates a focused tile.
   const handleCardClick = (e: React.MouseEvent, id: string, url: string) => {
+    const opensElsewhere = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
     onUpdateSiteVisits(id);
     addLog(
       "NET",
       "packet",
-      `Socket stream forwarding: routing client interface -> ${url}`,
+      `Socket stream forwarding: routing client interface${opensElsewhere ? " (new tab)" : ""} -> ${url}`,
     );
 
     launchPacketFrom(e.currentTarget as HTMLElement);
+    if (opensElsewhere) return;
 
     // Give the launch animation a beat to play before the page navigates away
+    e.preventDefault();
     setTimeout(() => {
       window.location.href = url;
     }, 380);
@@ -450,8 +456,20 @@ export default function PinnedSites({
       `Socket stream forwarding: routing client interface (new tab) -> ${url}`,
     );
     launchPacketFrom(e.currentTarget as HTMLElement);
-    window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  // Escape closes the add/edit form
+  React.useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsModalOpen(false);
+        setEditingSite(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isModalOpen]);
 
   const getThemeColors = () => {
     switch (settings.themeId) {
@@ -660,8 +678,12 @@ export default function PinnedSites({
                   }}
                 />
 
-                <div
-                  className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 ${
+                <a
+                  href={site.url}
+                  // The tile is reordered by its grip handle; without this the
+                  // browser would start dragging the link itself instead.
+                  draggable={false}
+                  className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 outline-none focus-visible:border-neutral-400 ${
                     isDraggedIdx
                       ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/60"
                       : isHoveredIdx
@@ -671,7 +693,6 @@ export default function PinnedSites({
                   onClick={(e) => handleCardClick(e, site.id, site.url)}
                   onAuxClick={(e) => {
                     if (e.button === 1) {
-                      e.preventDefault();
                       handleCardMiddleClick(e, site.id, site.url);
                     }
                   }}
@@ -689,12 +710,15 @@ export default function PinnedSites({
                     </div>
 
                     {/* Settings dropdown / option buttons for modifying bookmarks */}
-                    <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div className="flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200">
                       <motion.button
+                        type="button"
                         whileHover={{ scale: 1.2 }}
                         whileTap={{ scale: 0.85 }}
                         transition={BTN_SPRING}
                         onClick={(e) => {
+                          // preventDefault: the button sits inside the tile's link
+                          e.preventDefault();
                           e.stopPropagation();
                           openEditModal(site);
                         }}
@@ -704,10 +728,12 @@ export default function PinnedSites({
                         <Edit2 className="w-3 h-3" />
                       </motion.button>
                       <motion.button
+                        type="button"
                         whileHover={{ scale: 1.2 }}
                         whileTap={{ scale: 0.85 }}
                         transition={BTN_SPRING}
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           requestDelete(site);
                         }}
@@ -801,7 +827,7 @@ export default function PinnedSites({
                       <GripVertical className="w-3.5 h-3.5" />
                     </div>
                   </div>
-                </div>
+                </a>
               </TiltCard>
             </motion.div>
           );
@@ -883,6 +909,11 @@ export default function PinnedSites({
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            {/* Backdrop click closer */}
+            <div
+              className="absolute inset-0 cursor-pointer"
+              onClick={closeModal}
+            />
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

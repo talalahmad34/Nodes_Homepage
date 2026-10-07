@@ -28,13 +28,27 @@ import {
   Check,
 } from "lucide-react";
 import { PinnedSite, UserSettings, SystemLog, SystemTheme } from "./types";
-import { readLocal, readSync, write } from "./lib/storage";
+import {
+  onSyncChange,
+  readLocal,
+  readSync,
+  writeLocal,
+  writeSync,
+} from "./lib/storage";
+import {
+  isValidPinnedSite,
+  sanitizePinnedSites,
+  sanitizeSettings,
+} from "./lib/settings";
 import NetworkBackground from "./components/NetworkBackground";
 import FuturisticClock from "./components/FuturisticClock";
 import SearchConsole from "./components/SearchConsole";
 import PinnedSites from "./components/PinnedSites";
 import { BTN_HOVER, BTN_TAP, BTN_SPRING } from "./lib/motion";
-import { ALL_AI_PORTALS, DEFAULT_AI_PORTAL_IDS } from "./lib/aiPortals";
+import { ALL_AI_PORTALS } from "./lib/aiPortals";
+
+const SETTINGS_KEY = "netgrid_settings";
+const SITES_KEY = "netgrid_pinned_sites";
 
 // Shared animated switch visual for the settings drawer toggles — the knob springs
 // across on change and the whole track gives a light hover/press bounce.
@@ -149,23 +163,6 @@ const DEFAULT_SITES: PinnedSite[] = [
   },
 ];
 
-// Structural validation for a single pinned site parsed from an untrusted backup file/paste —
-// guards against e.g. an array of plain strings passing the earlier `Array.isArray` check alone.
-function isValidPinnedSite(value: unknown): value is PinnedSite {
-  if (!value || typeof value !== "object") return false;
-  const site = value as Record<string, unknown>;
-  return (
-    typeof site.id === "string" &&
-    typeof site.title === "string" &&
-    typeof site.url === "string" &&
-    (site.iconType === "initials" ||
-      site.iconType === "icon" ||
-      site.iconType === "custom") &&
-    typeof site.iconValue === "string" &&
-    typeof site.visitCount === "number"
-  );
-}
-
 interface BackupPayload {
   settings?: Partial<UserSettings>;
   pinnedSites?: PinnedSite[];
@@ -195,53 +192,22 @@ function parseBackupPayload(raw: string): BackupPayload | null {
   return result.settings || result.pinnedSites ? result : null;
 }
 
-const DEFAULT_SETTINGS: UserSettings = {
-  userName: "Operator",
-  themeId: "cyan",
-  timeFormat24h: true,
-  showSeconds: true,
-  searchEngineId: "duckduckgo",
-  showHexClock: true,
-  activeBackground: "network",
-  clockStyle: "cyber",
-  aiPortalIds: DEFAULT_AI_PORTAL_IDS,
-  techPingDelaySim: true,
-  showWorkProgress: false,
-  workStart: "09:00",
-  workEnd: "17:00",
-};
-
 export default function App() {
   const telemetryRef = useRef<HTMLTextAreaElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
-  const [settings, setSettings] = useState<UserSettings>(() => {
-    const parsed = readLocal<UserSettings>(
-      "netgrid_settings",
-      DEFAULT_SETTINGS,
-    );
-    // Force duckduckgo if the stored default is old 'google' or missing
-    if (parsed.searchEngineId === "google") {
-      parsed.searchEngineId = "duckduckgo";
-    }
-    // Settings saved before clockStyle/aiPortalIds existed won't have them in
-    // localStorage at all (readLocal returns the raw parsed JSON, not merged with
-    // DEFAULT_SETTINGS).
-    if (!parsed.clockStyle) {
-      parsed.clockStyle = "cyber";
-    }
-    if (!Array.isArray(parsed.aiPortalIds)) {
-      parsed.aiPortalIds = DEFAULT_AI_PORTAL_IDS;
-    }
-    return parsed;
-  });
+  // Settings saved by an older version can be missing newer fields (readLocal
+  // returns the raw parsed JSON), so they're always rebuilt over the defaults.
+  const [settings, setSettings] = useState<UserSettings>(() =>
+    sanitizeSettings(readLocal<unknown>(SETTINGS_KEY, null)),
+  );
 
   const [pinnedSites, setPinnedSites] = useState<PinnedSite[]>(() => {
-    const parsed = readLocal<PinnedSite[]>(
-      "netgrid_pinned_sites",
-      DEFAULT_SITES,
-    );
+    const parsed = readLocal<unknown>(SITES_KEY, null);
+    if (!Array.isArray(parsed)) return DEFAULT_SITES;
     // Filter out ChatGPT / Gemini standard bookmarks to avoid duplication
-    return parsed.filter((s) => s.id !== "chatgpt" && s.id !== "gemini");
+    return sanitizePinnedSites(parsed).filter(
+      (s) => s.id !== "chatgpt" && s.id !== "gemini",
+    );
   });
 
   const [logs, setLogs] = useState<SystemLog[]>(() => {
@@ -279,36 +245,72 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [localIp, setLocalIp] = useState<string | null>(null);
 
-  // Pull the latest chrome.storage.sync copy (if any) shortly after the instant
-  // local-cache paint, so edits made on another signed-in device show up here too.
-  useEffect(() => {
-    let cancelled = false;
-    readSync(["netgrid_settings", "netgrid_pinned_sites"]).then((synced) => {
-      if (cancelled) return;
-      if (synced.netgrid_settings) {
-        setSettings((prev) => ({
-          ...prev,
-          ...(synced.netgrid_settings as UserSettings),
-        }));
-      }
-      if (Array.isArray(synced.netgrid_pinned_sites)) {
-        setPinnedSites(synced.netgrid_pinned_sites as PinnedSite[]);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Sync writes are held back until the initial sync read below has finished —
+  // otherwise this tab's stale local cache could overwrite newer synced data.
+  const syncReadyRef = useRef(false);
+  const settingsRef = useRef(settings);
+  const pinnedSitesRef = useRef(pinnedSites);
 
   // Auto-save settings when updated (mirrors to localStorage + chrome.storage.sync)
   useEffect(() => {
-    write("netgrid_settings", settings);
+    settingsRef.current = settings;
+    writeLocal(SETTINGS_KEY, settings);
+    if (syncReadyRef.current) writeSync(SETTINGS_KEY, settings);
   }, [settings]);
 
   // Auto-save pinned sites when updated (mirrors to localStorage + chrome.storage.sync)
   useEffect(() => {
-    write("netgrid_pinned_sites", pinnedSites);
+    pinnedSitesRef.current = pinnedSites;
+    writeLocal(SITES_KEY, pinnedSites);
+    if (syncReadyRef.current) writeSync(SITES_KEY, pinnedSites);
   }, [pinnedSites]);
+
+  // Pull the latest chrome.storage.sync copy (if any) shortly after the instant
+  // local-cache paint, then keep following it, so edits made in another tab or on
+  // another signed-in device show up here too.
+  useEffect(() => {
+    let cancelled = false;
+
+    const applySynced = (key: string, value: unknown) => {
+      if (key === SETTINGS_KEY && value && typeof value === "object") {
+        setSettings((prev) => sanitizeSettings({ ...prev, ...value }));
+      } else if (key === SITES_KEY && Array.isArray(value)) {
+        setPinnedSites(sanitizePinnedSites(value));
+      }
+    };
+
+    readSync([SETTINGS_KEY, SITES_KEY]).then((synced) => {
+      if (cancelled) return;
+      syncReadyRef.current = true;
+      // Nothing synced yet for a key (first run on this account): seed it from here.
+      if (SETTINGS_KEY in synced) {
+        applySynced(SETTINGS_KEY, synced[SETTINGS_KEY]);
+      } else {
+        writeSync(SETTINGS_KEY, settingsRef.current);
+      }
+      if (SITES_KEY in synced) {
+        applySynced(SITES_KEY, synced[SITES_KEY]);
+      } else {
+        writeSync(SITES_KEY, pinnedSitesRef.current);
+      }
+    });
+
+    const unsubscribe = onSyncChange([SETTINGS_KEY, SITES_KEY], applySynced);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  // Escape closes the settings drawer
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsSettingsOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSettingsOpen]);
 
   // Sync state to telemetry text area ref when state updates
   useEffect(() => {
@@ -475,7 +477,7 @@ export default function App() {
     }
 
     if (payload.settings) {
-      setSettings((prev) => ({ ...prev, ...payload.settings }));
+      setSettings((prev) => sanitizeSettings({ ...prev, ...payload.settings }));
     }
     if (payload.pinnedSites) {
       setPinnedSites(payload.pinnedSites);
@@ -877,29 +879,27 @@ export default function App() {
                     Backdrop Visualizer Node
                   </span>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {(["network", "grid", "starfield"] as const).map(
-                      (bgType) => {
-                        const isSelected = settings.activeBackground === bgType;
-                        return (
-                          <motion.button
-                            key={bgType}
-                            whileHover={BTN_HOVER}
-                            whileTap={BTN_TAP}
-                            transition={BTN_SPRING}
-                            onClick={() =>
-                              updateSettingField("activeBackground", bgType)
-                            }
-                            className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-colors cursor-pointer ${
-                              isSelected
-                                ? "border-neutral-700 bg-neutral-900 text-white font-bold"
-                                : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
-                            }`}
-                          >
-                            {bgType}
-                          </motion.button>
-                        );
-                      },
-                    )}
+                    {(["orbit", "grid", "starfield"] as const).map((bgType) => {
+                      const isSelected = settings.activeBackground === bgType;
+                      return (
+                        <motion.button
+                          key={bgType}
+                          whileHover={BTN_HOVER}
+                          whileTap={BTN_TAP}
+                          transition={BTN_SPRING}
+                          onClick={() =>
+                            updateSettingField("activeBackground", bgType)
+                          }
+                          className={`p-2 rounded text-[10.5px] text-center uppercase tracking-wide border transition-colors cursor-pointer ${
+                            isSelected
+                              ? "border-neutral-700 bg-neutral-900 text-white font-bold"
+                              : "border-neutral-900 text-neutral-500 hover:text-neutral-400"
+                          }`}
+                        >
+                          {bgType}
+                        </motion.button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1177,12 +1177,14 @@ export default function App() {
                           Shift Start
                         </span>
                         <input
-                          type="text"
+                          type="time"
                           value={settings.workStart || "09:00"}
-                          onChange={(e) =>
-                            updateSettingField("workStart", e.target.value)
-                          }
-                          className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
+                          onChange={(e) => {
+                            // Empty while the field is cleared or half-typed
+                            if (e.target.value)
+                              updateSettingField("workStart", e.target.value);
+                          }}
+                          className="w-24 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px] [color-scheme:dark]"
                         />
                       </div>
                       <div className="flex flex-col">
@@ -1190,12 +1192,13 @@ export default function App() {
                           Shift End
                         </span>
                         <input
-                          type="text"
+                          type="time"
                           value={settings.workEnd || "17:00"}
-                          onChange={(e) =>
-                            updateSettingField("workEnd", e.target.value)
-                          }
-                          className="w-16 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px]"
+                          onChange={(e) => {
+                            if (e.target.value)
+                              updateSettingField("workEnd", e.target.value);
+                          }}
+                          className="w-24 bg-neutral-900 border border-neutral-800 rounded p-1 text-center outline-none text-white focus:border-neutral-700 text-[10.5px] [color-scheme:dark]"
                         />
                       </div>
                     </div>

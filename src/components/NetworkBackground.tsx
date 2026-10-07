@@ -48,25 +48,70 @@ interface CircuitRunner {
   temporary?: boolean;
 }
 
+// The 'orbit' variant: a slow gyroscope of concentric rings centred on the clock, with
+// satellites riding the rings and a radar beam that lights up contacts as it sweeps.
+// Everything is positioned from the frame timestamp rather than stepped per frame, so
+// it moves at the same pace on 60Hz and 144Hz displays.
+interface OrbitRing {
+  radius: number;
+  speed: number; // radians per second; sign is the direction of rotation
+  arcs: { start: number; length: number }[];
+  ticked: boolean;
+}
+
+interface OrbitSatellite {
+  radius: number;
+  angle: number;
+  speed: number;
+  size: number;
+}
+
+interface OrbitBlip {
+  angle: number;
+  dist: number;
+  litAt: number; // timestamp (seconds) the beam or a ripple last crossed it
+}
+
 const GRID_SPACING = 40;
+const TAU = Math.PI * 2;
+
+// Ring radii as a fraction of the viewport's shorter side. The outer ones are larger
+// than the screen on purpose, so they read as sweeping arcs along its edges.
+const ORBIT_RING_SCALES = [0.2, 0.3, 0.42, 0.56, 0.72, 0.92, 1.15];
+const ORBIT_SWEEP_SPEED = 0.45; // radians per second — one revolution every ~14s
+const ORBIT_SWEEP_LINES = 12;
+const ORBIT_BLIP_COUNT = 16;
+const ORBIT_BLIP_FADE = 2.4; // seconds a contact stays lit
+
+// Render at the display's pixel density so lines stay crisp on HiDPI screens, but
+// capped: beyond 2x the extra pixels cost fill time without being visible.
+const MAX_PIXEL_RATIO = 2;
+
+type BackgroundType = "orbit" | "starfield" | "grid";
+
+const THEME_COLORS: Record<string, { primary: string; rgb: string }> = {
+  "emerald-400": { primary: "#34d399", rgb: "52, 211, 153" },
+  "cyan-400": { primary: "#22d3ee", rgb: "34, 211, 238" },
+  "amber-400": { primary: "#fbbf24", rgb: "251, 191, 36" },
+  "purple-400": { primary: "#c084fc", rgb: "192, 132, 252" },
+  "rose-400": { primary: "#fb7185", rgb: "251, 113, 133" },
+};
 
 interface NetworkBackgroundProps {
-  type?: "network" | "starfield" | "grid";
-  colorTheme: string; // Hex or tailwind colors
+  type?: BackgroundType;
+  colorTheme: string; // Tailwind color name, e.g. "cyan-400"
 }
 
 export default function NetworkBackground({
-  type = "network",
+  type = "orbit",
   colorTheme,
 }: NetworkBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Coerce raw type to make sure it is always stable and defaults to network
-  const bgType =
-    type === "network" || type === "starfield" || type === "grid"
-      ? type
-      : "network";
+  // Coerce raw type to make sure it is always stable and defaults to orbit
+  const bgType: BackgroundType =
+    type === "starfield" || type === "grid" ? type : "orbit";
 
   // Store mouse coordinates
   const mouseRef = useRef({ x: -1000, y: -1000, active: false });
@@ -83,56 +128,15 @@ export default function NetworkBackground({
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    // Map theme colors to CSS/Canvas colors
-    const getThemeColor = () => {
-      switch (colorTheme) {
-        case "emerald-400":
-          return {
-            primary: "#34d399",
-            secondary: "#059669",
-            opacity: "rgba(52, 211, 153, 0.15)",
-            rgb: "52, 211, 153",
-          };
-        case "cyan-400":
-          return {
-            primary: "#22d3ee",
-            secondary: "#0891b2",
-            opacity: "rgba(34, 211, 238, 0.15)",
-            rgb: "34, 211, 238",
-          };
-        case "amber-400":
-          return {
-            primary: "#fbbf24",
-            secondary: "#d97706",
-            opacity: "rgba(251, 191, 36, 0.15)",
-            rgb: "251, 191, 36",
-          };
-        case "purple-400":
-          return {
-            primary: "#c084fc",
-            secondary: "#9333ea",
-            opacity: "rgba(192, 132, 252, 0.15)",
-            rgb: "192, 132, 252",
-          };
-        case "rose-400":
-          return {
-            primary: "#fb7185",
-            secondary: "#e11d48",
-            opacity: "rgba(251, 113, 133, 0.15)",
-            rgb: "251, 113, 133",
-          };
-        default:
-          return {
-            primary: "#34d399",
-            secondary: "#059669",
-            opacity: "rgba(52, 211, 153, 0.15)",
-            rgb: "52, 211, 153",
-          };
-      }
-    };
     if (!ctx) return;
 
+    const colors = THEME_COLORS[colorTheme] ?? THEME_COLORS["emerald-400"];
+
     let animationFrameId: number;
+    // Canvas size in CSS pixels. The backing store is larger on HiDPI screens, and
+    // the context is scaled to match, so all drawing below works in CSS pixels.
+    let viewW = 0;
+    let viewH = 0;
     let particles: Particle[] = [];
     const pulses = pulsesRef.current;
     // Mutated in place (never reassigned) so the click handler outside this effect
@@ -140,10 +144,16 @@ export default function NetworkBackground({
     const runners = runnersRef.current;
     const trail = trailRef.current;
     let cachedNodeCenters: { x: number; y: number }[] = [];
-    const maxParticles =
-      bgType === "network" ? 70 : bgType === "grid" ? 100 : 120;
-    const connectionDist = 120;
+    const STAR_COUNT = 120;
     const AMBIENT_RUNNER_COUNT = 32;
+
+    let rings: OrbitRing[] = [];
+    let satellites: OrbitSatellite[] = [];
+    let blips: OrbitBlip[] = [];
+    // Where the rings are centred: `hubHome` is the clock's position (measured with
+    // the tiles below), and `hub` trails it with a slight lean toward the cursor.
+    let hubHome = { x: 0, y: 0 };
+    const hub = { x: 0, y: 0 };
 
     const spawnAmbientRunner = (
       width: number,
@@ -162,30 +172,72 @@ export default function NetworkBackground({
       };
     };
 
+    // A radar contact somewhere between the innermost and fifth ring. `litAt` starts
+    // far in the past so it sits dark until the beam first reaches it.
+    const spawnBlip = (): OrbitBlip => {
+      const inner = rings[0].radius;
+      const outer = rings[4].radius;
+      return {
+        angle: Math.random() * TAU,
+        dist: inner + Math.random() * (outer - inner),
+        litAt: -ORBIT_BLIP_FADE * 2,
+      };
+    };
+
     const resizeCanvas = () => {
       if (containerRef.current && canvas) {
         const { width, height } = containerRef.current.getBoundingClientRect();
-        canvas.width = width;
-        canvas.height = height;
-        initParticles(width, height);
+        const pixelRatio = Math.min(
+          window.devicePixelRatio || 1,
+          MAX_PIXEL_RATIO,
+        );
+        viewW = width;
+        viewH = height;
+        canvas.width = Math.round(width * pixelRatio);
+        canvas.height = Math.round(height * pixelRatio);
+        // Resizing resets the context, so the scale is reapplied every time
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        initScene(width, height);
       }
     };
 
-    const initParticles = (width: number, height: number) => {
+    const initScene = (width: number, height: number) => {
       particles = [];
-      const colors = getThemeColor();
 
-      if (bgType === "network") {
-        for (let i = 0; i < maxParticles; i++) {
-          particles.push({
-            x: Math.random() * width,
-            y: Math.random() * height,
-            vx: (Math.random() - 0.5) * 0.6,
-            vy: (Math.random() - 0.5) * 0.6,
-            radius: Math.random() * 2 + 1.5,
-            color: colors.primary,
-          });
-        }
+      if (bgType === "orbit") {
+        const base = Math.min(width, height);
+        rings = ORBIT_RING_SCALES.map((scale, i) => {
+          const arcCount = 2 + (i % 2);
+          return {
+            radius: base * scale,
+            // Neighbouring rings counter-rotate
+            speed: (0.025 + Math.random() * 0.04) * (i % 2 === 0 ? 1 : -1),
+            arcs: Array.from({ length: arcCount }, (_, a) => ({
+              start: (a / arcCount) * TAU + Math.random() * 0.8,
+              length: 0.5 + Math.random() * 1.1,
+            })),
+            ticked: i === 2,
+          };
+        });
+
+        // Satellites keep a similar on-screen speed whatever ring they ride, so the
+        // angular speed falls off with radius. Each runs against its ring's rotation.
+        satellites = rings.slice(0, 5).flatMap((ring, i) =>
+          Array.from({ length: i === 0 ? 1 : 2 }, () => ({
+            radius: ring.radius,
+            angle: Math.random() * TAU,
+            speed:
+              ((22 + Math.random() * 18) / ring.radius) *
+              (ring.speed > 0 ? -1 : 1),
+            size: 1.6 + Math.random() * 1.4,
+          })),
+        );
+
+        blips = Array.from({ length: ORBIT_BLIP_COUNT }, spawnBlip);
+
+        hubHome = { x: width / 2, y: height * 0.3 };
+        hub.x = hubHome.x;
+        hub.y = hubHome.y;
       } else if (bgType === "grid") {
         // Dim "node" dots sitting at circuit-grid intersections — mostly dormant,
         // they light up when a runner, the cursor, or a click pulse passes nearby (see draw()).
@@ -216,7 +268,7 @@ export default function NetworkBackground({
         }
       } else {
         // Starfield
-        for (let i = 0; i < maxParticles; i++) {
+        for (let i = 0; i < STAR_COUNT; i++) {
           particles.push({
             x: Math.random() * width,
             y: Math.random() * height,
@@ -232,8 +284,9 @@ export default function NetworkBackground({
     // The animated line connectors below track the on-screen position of the pinned-site
     // tiles (`.bookmark-tile-node`). Rather than re-querying and measuring every tile on a
     // fixed frame interval regardless of whether anything changed, invalidate the cached
-    // positions only when the grid actually changes shape (nodes added/removed/reordered)
-    // or the viewport resizes, and rescan the tiles once a short debounce settles.
+    // positions only when the page actually changes shape (nodes added/removed/reordered,
+    // the clock face swapped) or the viewport resizes, and rescan once a short debounce
+    // settles.
     let tileRescanNeeded = true;
     let tileRescanTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleTileRescan = () => {
@@ -256,6 +309,12 @@ export default function NetworkBackground({
 
     // Set initial size
     resizeCanvas();
+
+    // The tiles slide into place over their first few hundred milliseconds, so the
+    // positions measured on the first frame are slightly off — measure again after.
+    const settleRescanTimer = setTimeout(() => {
+      tileRescanNeeded = true;
+    }, 700);
 
     // Cursor tracking is bound to the window rather than the canvas wrapper: the wrapper
     // sits beneath the page content, so tile/card hovers would otherwise swallow the
@@ -297,40 +356,187 @@ export default function NetworkBackground({
     window.addEventListener("mousemove", handleWindowPointerMove);
     document.addEventListener("mouseleave", handleWindowPointerLeave);
 
-    // Watches the pinned-site grid for nodes being added, removed, or reordered
-    // (childList changes only — deliberately ignores style/class mutations so that
-    // hover/drag animations elsewhere on the page don't trigger constant rescans).
-    const gridContainer =
-      document.getElementById("pinned-node-grid-hub") ?? document.body;
-    const gridMutationObserver = new MutationObserver(scheduleTileRescan);
-    gridMutationObserver.observe(gridContainer, {
+    // Watches the page for elements being added, removed, or reordered (childList
+    // changes only — deliberately ignores style/class/text mutations so that hover/drag
+    // animations and the ticking clock don't trigger constant rescans).
+    const layoutMutationObserver = new MutationObserver(scheduleTileRescan);
+    layoutMutationObserver.observe(document.body, {
       childList: true,
       subtree: true,
     });
 
-    const draw = () => {
-      const colors = getThemeColor();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drawOrbit = (t: number) => {
+      const mouse = mouseRef.current;
 
-      const w = canvas.width;
-      const h = canvas.height;
+      // Lean the whole assembly a few pixels toward the cursor, easing into place
+      const leanX = mouse.active ? (mouse.x - hubHome.x) * 0.03 : 0;
+      const leanY = mouse.active ? (mouse.y - hubHome.y) * 0.03 : 0;
+      hub.x += (hubHome.x + leanX - hub.x) * 0.06;
+      hub.y += (hubHome.y + leanY - hub.y) * 0.06;
+      const cx = hub.x;
+      const cy = hub.y;
 
-      // Draw background cybergrid lines for "network/grid" types — brighter and more
-      // present for "grid" so the circuit board reads as alive even before anything moves.
-      if (bgType === "grid" || bgType === "network") {
-        const lineAlpha = bgType === "grid" ? 0.05 : 0.015;
-        ctx.strokeStyle = `rgba(255, 255, 255, ${lineAlpha})`;
+      rings.forEach((ring) => {
+        const rotation = t * ring.speed;
+
+        // Faint full track
+        ctx.strokeStyle = `rgba(${colors.rgb}, 0.07)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ring.radius, 0, TAU);
+        ctx.stroke();
+
+        // One ring carries graduation ticks: a wide stroke dashed so finely that
+        // only short radial marks are left, all drawn in a single call.
+        if (ring.ticked) {
+          ctx.strokeStyle = `rgba(${colors.rgb}, 0.2)`;
+          ctx.lineWidth = 7;
+          ctx.setLineDash([1.5, (ring.radius * TAU) / 90 - 1.5]);
+          ctx.beginPath();
+          ctx.arc(cx, cy, ring.radius, rotation, rotation + TAU);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Bright rotating segments
+        ctx.strokeStyle = `rgba(${colors.rgb}, 0.38)`;
+        ctx.lineWidth = 1.5;
+        ring.arcs.forEach((arc) => {
+          const start = arc.start + rotation;
+          ctx.beginPath();
+          ctx.arc(cx, cy, ring.radius, start, start + arc.length);
+          ctx.stroke();
+        });
+      });
+
+      // Radar beam: a leading line with a fan of fainter ones trailing behind it
+      const sweep = (t * ORBIT_SWEEP_SPEED) % TAU;
+      const beamInner = rings[0].radius * 0.55;
+      const beamOuter = rings[4].radius;
+      ctx.lineWidth = 1;
+      for (let k = 0; k < ORBIT_SWEEP_LINES; k++) {
+        const angle = sweep - k * 0.03;
+        const fade = 1 - k / ORBIT_SWEEP_LINES;
+        ctx.strokeStyle = `rgba(${colors.rgb}, ${0.32 * fade * fade})`;
+        ctx.beginPath();
+        ctx.moveTo(
+          cx + Math.cos(angle) * beamInner,
+          cy + Math.sin(angle) * beamInner,
+        );
+        ctx.lineTo(
+          cx + Math.cos(angle) * beamOuter,
+          cy + Math.sin(angle) * beamOuter,
+        );
+        ctx.stroke();
+      }
+
+      // Contacts flare as the beam (or a click ripple) crosses them, then fade out
+      // and move somewhere new for the next pass.
+      blips.forEach((blip) => {
+        const bx = cx + Math.cos(blip.angle) * blip.dist;
+        const by = cy + Math.sin(blip.angle) * blip.dist;
+
+        const beamPast = (sweep - blip.angle + TAU) % TAU;
+        if (beamPast < 0.06 && t - blip.litAt > 1) blip.litAt = t;
+        for (const pulse of pulses) {
+          const d = Math.hypot(bx - pulse.x, by - pulse.y);
+          if (Math.abs(d - pulse.radius) < 12) blip.litAt = t;
+        }
+
+        const age = t - blip.litAt;
+        if (age >= ORBIT_BLIP_FADE) {
+          if (blip.litAt > 0) Object.assign(blip, spawnBlip());
+          return;
+        }
+
+        const glow = 1 - age / ORBIT_BLIP_FADE;
+        ctx.fillStyle = `rgba(${colors.rgb}, ${glow * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(bx, by, 2, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${colors.rgb}, ${glow * 0.4})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(bx, by, 4 + age * 9, 0, TAU);
+        ctx.stroke();
+      });
+
+      // Satellites, each dragging a short arc of trail along its ring
+      const positions = satellites.map((sat) => {
+        const angle = sat.angle + t * sat.speed;
+        const trailLength = 46 / sat.radius;
+        ctx.strokeStyle = `rgba(${colors.rgb}, 0.3)`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        if (sat.speed > 0) {
+          ctx.arc(cx, cy, sat.radius, angle - trailLength, angle);
+        } else {
+          ctx.arc(cx, cy, sat.radius, angle, angle + trailLength);
+        }
+        ctx.stroke();
+
+        const x = cx + Math.cos(angle) * sat.radius;
+        const y = cy + Math.sin(angle) * sat.radius;
+        ctx.fillStyle = `rgba(${colors.rgb}, 0.16)`;
+        ctx.beginPath();
+        ctx.arc(x, y, sat.size * 3, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = colors.primary;
+        ctx.beginPath();
+        ctx.arc(x, y, sat.size, 0, TAU);
+        ctx.fill();
+        return { x, y };
+      });
+
+      // Link satellites that drift close to each other, and to the cursor
+      ctx.lineWidth = 1;
+      for (let i = 0; i < positions.length; i++) {
+        const a = positions[i];
+        for (let j = i + 1; j < positions.length; j++) {
+          const b = positions[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < 150) {
+            ctx.strokeStyle = `rgba(${colors.rgb}, ${(1 - d / 150) * 0.14})`;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+
+        if (mouse.active) {
+          const d = Math.hypot(a.x - mouse.x, a.y - mouse.y);
+          if (d < 180) {
+            ctx.strokeStyle = `rgba(${colors.rgb}, ${(1 - d / 180) * 0.3})`;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(mouse.x, mouse.y);
+            ctx.stroke();
+          }
+        }
+      }
+    };
+
+    const draw = (now: number) => {
+      const w = viewW;
+      const h = viewH;
+      ctx.clearRect(0, 0, w, h);
+
+      // Circuit-board lines for the "grid" variant, drawn bright enough that the
+      // board reads as alive even before anything moves.
+      if (bgType === "grid") {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
         ctx.lineWidth = 1;
 
         // Vertical lines
-        for (let x = 0; x < w; x += 40) {
+        for (let x = 0; x < w; x += GRID_SPACING) {
           ctx.beginPath();
           ctx.moveTo(x, 0);
           ctx.lineTo(x, h);
           ctx.stroke();
         }
         // Horizontal lines
-        for (let y = 0; y < h; y += 40) {
+        for (let y = 0; y < h; y += GRID_SPACING) {
           ctx.beginPath();
           ctx.moveTo(0, y);
           ctx.lineTo(w, y);
@@ -338,132 +544,45 @@ export default function NetworkBackground({
         }
 
         // Concentric radial coordinate scanlines
-        const scanAlpha = bgType === "grid" ? 0.05 : 0.012;
-        ctx.strokeStyle = `rgba(${colors.rgb}, ${scanAlpha})`;
+        ctx.strokeStyle = `rgba(${colors.rgb}, 0.05)`;
         ctx.beginPath();
-        ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3, 0, Math.PI * 2);
+        ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.3, 0, TAU);
         ctx.stroke();
         ctx.beginPath();
-        ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.45, 0, Math.PI * 2);
+        ctx.arc(w / 2, h / 2, Math.min(w, h) * 0.45, 0, TAU);
         ctx.stroke();
       }
 
       // Draw active background pulse expanders
-      pulses.forEach((pulse, index) => {
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const pulse = pulses[i];
         pulse.radius += pulse.speed;
         pulse.alpha = Math.max(0, 1 - pulse.radius / pulse.maxRadius);
 
         ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.35})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(pulse.x, pulse.y, pulse.radius, 0, Math.PI * 2);
+        ctx.arc(pulse.x, pulse.y, pulse.radius, 0, TAU);
         ctx.stroke();
 
         ctx.strokeStyle = `rgba(${colors.rgb}, ${pulse.alpha * 0.12})`;
         ctx.lineWidth = 8;
         ctx.beginPath();
-        ctx.arc(pulse.x, pulse.y, pulse.radius, 0, Math.PI * 2);
+        ctx.arc(pulse.x, pulse.y, pulse.radius, 0, TAU);
         ctx.stroke();
 
         if (pulse.alpha <= 0 || pulse.radius >= pulse.maxRadius) {
-          pulses.splice(index, 1);
-        }
-      });
-
-      // Node connection math
-      if (bgType === "network") {
-        const networkColorRGB = colors.rgb;
-
-        // Connect particles within grid
-        for (let i = 0; i < particles.length; i++) {
-          const p1 = particles[i];
-          for (let j = i + 1; j < particles.length; j++) {
-            const p2 = particles[j];
-            const dx = p1.x - p2.x;
-            const dy = p1.y - p2.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < connectionDist) {
-              const alpha = (1 - dist / connectionDist) * 0.09;
-              ctx.strokeStyle = `rgba(${networkColorRGB}, ${alpha})`;
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.moveTo(p1.x, p1.y);
-              ctx.lineTo(p2.x, p2.y);
-              ctx.stroke();
-
-              // Occasionally animate packets along connections
-              if (Math.random() < 0.00002) {
-                ctx.fillStyle = colors.primary;
-                ctx.beginPath();
-                ctx.arc(
-                  (p1.x + p2.x) / 2,
-                  (p1.y + p2.y) / 2,
-                  2,
-                  0,
-                  Math.PI * 2,
-                );
-                ctx.fill();
-              }
-            }
-          }
-
-          // Connect with cursor
-          if (mouseRef.current.active) {
-            const mdx = p1.x - mouseRef.current.x;
-            const mdy = p1.y - mouseRef.current.y;
-            const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-            if (mdist < 140) {
-              const alpha = (1 - mdist / 140) * 0.18;
-              ctx.strokeStyle = `rgba(${networkColorRGB}, ${alpha})`;
-              ctx.lineWidth = 1.2;
-              ctx.beginPath();
-              ctx.moveTo(p1.x, p1.y);
-              ctx.lineTo(mouseRef.current.x, mouseRef.current.y);
-              ctx.stroke();
-            }
-          }
+          pulses.splice(i, 1);
         }
       }
 
-      // Draw and update particles
-      particles.forEach((p) => {
-        // Render depending on mode
-        if (bgType === "network") {
-          // Normal physics update
-          p.x += p.vx;
-          p.y += p.vy;
+      if (bgType === "orbit") {
+        drawOrbit(now / 1000);
+      }
 
-          // Bounce off bounds
-          if (p.x < 0 || p.x > w) p.vx *= -1;
-          if (p.y < 0 || p.y > h) p.vy *= -1;
-
-          // Push slightly away from mouse
-          if (mouseRef.current.active) {
-            const dx = p.x - mouseRef.current.x;
-            const dy = p.y - mouseRef.current.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 120) {
-              const force = (120 - dist) * 0.003;
-              p.x += (dx / dist) * force;
-              p.y += (dy / dist) * force;
-            }
-          }
-
-          // Draw node
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Outer halo on larger nodes
-          if (p.radius > 2.5) {
-            ctx.fillStyle = `rgba(${colors.rgb}, 0.15)`;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius * 2.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        } else if (bgType === "starfield") {
+      // Drifting stars
+      if (bgType === "starfield") {
+        particles.forEach((p) => {
           p.y += p.vy;
           if (p.y < 0) {
             p.y = h;
@@ -475,10 +594,10 @@ export default function NetworkBackground({
 
           ctx.fillStyle = p.color;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.radius, 0, TAU);
           ctx.fill();
-        }
-      });
+        });
+      }
 
       // Circuit-board data runners + their glowing intersection nodes (grid variant only)
       if (bgType === "grid") {
@@ -535,11 +654,11 @@ export default function NetworkBackground({
 
           ctx.fillStyle = `rgba(${colors.rgb}, 0.25)`;
           ctx.beginPath();
-          ctx.arc(r.x, r.y, 5, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, 5, 0, TAU);
           ctx.fill();
           ctx.fillStyle = "#ffffff";
           ctx.beginPath();
-          ctx.arc(r.x, r.y, 1.6, 0, Math.PI * 2);
+          ctx.arc(r.x, r.y, 1.6, 0, TAU);
           ctx.fill();
         }
 
@@ -569,13 +688,13 @@ export default function NetworkBackground({
           alpha = Math.min(alpha, 1);
           ctx.fillStyle = `rgba(${colors.rgb}, ${alpha})`;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius + alpha * 2.4, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.radius + alpha * 2.4, 0, TAU);
           ctx.fill();
         });
       }
 
       // Live Grid Particle HTML Node-block connects
-      if (tileRescanNeeded || cachedNodeCenters.length === 0) {
+      if (tileRescanNeeded) {
         tileRescanNeeded = false;
         cachedNodeCenters = [];
         const tiles = document.querySelectorAll(".bookmark-tile-node");
@@ -588,6 +707,16 @@ export default function NetworkBackground({
             cachedNodeCenters.push({ x: cx, y: cy });
           }
         });
+
+        // The orbit rings are centred on the clock, wherever the layout puts it
+        const clock = document.getElementById("clock-shield");
+        if (clock) {
+          const rect = clock.getBoundingClientRect();
+          hubHome = {
+            x: rect.left + rect.width / 2 - canvasRect.left,
+            y: rect.top + rect.height / 2 - canvasRect.top,
+          };
+        }
       }
 
       const activeColorRGB = colors.rgb;
@@ -614,7 +743,7 @@ export default function NetworkBackground({
             // Draw tactile indicator points on the grid canvas
             ctx.fillStyle = colors.primary;
             ctx.beginPath();
-            ctx.arc(node.x, node.y, 2.5, 0, Math.PI * 2);
+            ctx.arc(node.x, node.y, 2.5, 0, TAU);
             ctx.fill();
 
             // Neon pulse ring
@@ -626,7 +755,7 @@ export default function NetworkBackground({
               node.y,
               6 + Math.sin(Date.now() / 150) * 1.5,
               0,
-              Math.PI * 2,
+              TAU,
             );
             ctx.stroke();
           }
@@ -650,11 +779,11 @@ export default function NetworkBackground({
 
         ctx.fillStyle = `rgba(${colors.rgb}, ${s.life * 0.5})`;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.radius * s.life * 2.4, 0, Math.PI * 2);
+        ctx.arc(s.x, s.y, s.radius * s.life * 2.4, 0, TAU);
         ctx.fill();
         ctx.fillStyle = `rgba(255, 255, 255, ${s.life * 0.85})`;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.radius * s.life, 0, Math.PI * 2);
+        ctx.arc(s.x, s.y, s.radius * s.life, 0, TAU);
         ctx.fill();
       }
 
@@ -672,20 +801,24 @@ export default function NetworkBackground({
         glow.addColorStop(1, `rgba(${colors.rgb}, 0)`);
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(mouseRef.current.x, mouseRef.current.y, 90, 0, Math.PI * 2);
+        ctx.arc(mouseRef.current.x, mouseRef.current.y, 90, 0, TAU);
         ctx.fill();
       }
 
       // Floating data center monitor overlay text
       ctx.fillStyle = "rgba(255, 255, 255, 0.022)";
-      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.font = '10px "JetBrains Mono Variable", monospace';
       ctx.fillText("[SYSTEM_ROOT_NODE: OK]", 20, h - 35);
-      ctx.fillText(`[GRID_DIM: ${w}x${h}px]`, 20, h - 20);
+      ctx.fillText(
+        `[GRID_DIM: ${Math.round(w)}x${Math.round(h)}px]`,
+        20,
+        h - 20,
+      );
 
       animationFrameId = requestAnimationFrame(draw);
     };
 
-    draw();
+    animationFrameId = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -693,10 +826,11 @@ export default function NetworkBackground({
         resizeObserver.unobserve(container);
       }
       resizeObserver.disconnect();
-      gridMutationObserver.disconnect();
+      layoutMutationObserver.disconnect();
       window.removeEventListener("mousemove", handleWindowPointerMove);
       document.removeEventListener("mouseleave", handleWindowPointerLeave);
       if (tileRescanTimer) clearTimeout(tileRescanTimer);
+      clearTimeout(settleRescanTimer);
     };
   }, [bgType, colorTheme]);
 

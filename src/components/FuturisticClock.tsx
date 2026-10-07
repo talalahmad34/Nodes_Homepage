@@ -18,6 +18,12 @@ interface FuturisticClockProps {
   ) => void;
 }
 
+// Where the current time falls in the configured work shift.
+interface ShiftProgress {
+  pct: number; // 0-100
+  text: string;
+}
+
 interface ClockColors {
   text: string;
   glow: string;
@@ -38,7 +44,7 @@ interface ClockFaceProps {
   formattedSecs: string;
   period: string;
   formatFullDate: () => string;
-  getShiftProgressText: () => string | null;
+  shift: ShiftProgress | null;
   binaryColumns: string[][];
   displayTx: number;
   displayRx: number;
@@ -54,7 +60,7 @@ function CyberFace({
   formattedSecs,
   period,
   formatFullDate,
-  getShiftProgressText,
+  shift,
   binaryColumns,
   displayTx,
   displayRx,
@@ -159,7 +165,7 @@ function CyberFace({
               <span
                 className={`${colors.text} font-bold font-mono text-xs sm:text-sm mt-0.5 animate-pulse`}
               >
-                {getShiftProgressText()}
+                {shift?.text}
               </span>
             </div>
           ) : (
@@ -213,6 +219,35 @@ function CyberFace({
   );
 }
 
+// Circumference of the analog dial's rim circle (r = 94 in its 200x200 viewBox).
+const RIM_CIRCUMFERENCE = 2 * Math.PI * 94;
+
+// Compact work-shift tracker for the faces that have no telemetry footer to put it in.
+function ShiftReadout({
+  shift,
+  colors,
+}: {
+  shift: ShiftProgress;
+  colors: ClockColors;
+}) {
+  return (
+    <div className="mt-3 flex flex-col items-center gap-1.5 font-mono z-10">
+      <div className="text-[10px] tracking-[0.25em] uppercase text-neutral-500">
+        Shift{" "}
+        <span className={`${colors.text} font-bold tracking-wider`}>
+          {shift.text}
+        </span>
+      </div>
+      <div className="h-0.5 w-40 rounded-full bg-neutral-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${colors.accentBg} transition-[width] duration-700`}
+          style={{ width: `${shift.pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // A stripped-down face for anyone who wants the time without the telemetry noise:
 // just the digits, the date, and a thin accent divider.
 function MinimalFace({
@@ -223,6 +258,7 @@ function MinimalFace({
   formattedSecs,
   period,
   formatFullDate,
+  shift,
 }: ClockFaceProps) {
   return (
     <div
@@ -261,6 +297,8 @@ function MinimalFace({
       <span className="text-[11px] sm:text-xs font-mono tracking-[0.35em] text-neutral-500 uppercase">
         {formatFullDate()}
       </span>
+
+      {shift && <ShiftReadout shift={shift} colors={colors} />}
     </div>
   );
 }
@@ -272,6 +310,7 @@ function AnalogFace({
   time,
   colors,
   formatFullDate,
+  shift,
 }: ClockFaceProps) {
   const hours = time.getHours() % 12;
   const mins = time.getMinutes();
@@ -311,6 +350,21 @@ function AnalogFace({
           stroke="rgba(255,255,255,0.12)"
           strokeWidth="2"
         />
+        {/* Shift progress traced clockwise around the rim from 12 o'clock */}
+        {shift && (
+          <circle
+            cx="100"
+            cy="100"
+            r="94"
+            fill="none"
+            stroke={accentHex}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={`${(shift.pct / 100) * RIM_CIRCUMFERENCE} ${RIM_CIRCUMFERENCE}`}
+            transform="rotate(-90 100 100)"
+            opacity={shift.pct > 0 ? 0.85 : 0}
+          />
+        )}
         {tickMarks.map((i) => {
           const angle = i * 30;
           const isMajor = i % 3 === 0;
@@ -369,6 +423,8 @@ function AnalogFace({
       <span className="mt-3 text-[11px] sm:text-xs font-mono tracking-[0.35em] text-neutral-500 uppercase z-10">
         {formatFullDate()}
       </span>
+
+      {shift && <ShiftReadout shift={shift} colors={colors} />}
     </div>
   );
 }
@@ -474,7 +530,7 @@ export default function FuturisticClock({
     return time.toLocaleDateString("en-US", options).toUpperCase();
   };
 
-  const getShiftProgressText = () => {
+  const getShiftProgress = (): ShiftProgress | null => {
     if (
       !settings.showWorkProgress ||
       !settings.workStart ||
@@ -495,19 +551,21 @@ export default function FuturisticClock({
       const endMin = parseTimeToMinutes(settings.workEnd);
       const currentMin = time.getHours() * 60 + time.getMinutes();
 
+      if (Number.isNaN(startMin) || Number.isNaN(endMin)) return null;
+
       if (currentMin < startMin) {
-        return `0% (Starts at ${settings.workStart})`;
+        return { pct: 0, text: `0% (Starts at ${settings.workStart})` };
       }
       if (currentMin >= endMin) {
-        return `100% (Shift Ended)`;
+        return { pct: 100, text: "100% (Shift Ended)" };
       }
 
       const totalShift = endMin - startMin;
-      if (totalShift <= 0) return "0%";
+      if (totalShift <= 0) return { pct: 0, text: "0%" };
 
       const elapsed = currentMin - startMin;
       const pct = (elapsed / totalShift) * 100;
-      return `${(Math.round(pct * 10) / 10).toFixed(1)}% Active`;
+      return { pct, text: `${(Math.round(pct * 10) / 10).toFixed(1)}% Active` };
     } catch {
       return null;
     }
@@ -603,7 +661,7 @@ export default function FuturisticClock({
     formattedSecs,
     period,
     formatFullDate,
-    getShiftProgressText,
+    shift: getShiftProgress(),
     binaryColumns,
     displayTx,
     displayRx,

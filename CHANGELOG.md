@@ -2,6 +2,32 @@
 
 All notable changes to the **Nodes Homepage Extension** project will be documented in this file.
 
+## [1.6.0] - 2026-10-07
+
+### Added
+
+- **Orbit backdrop**: a new default background replaces the old "network" particle field. Concentric rings rotate slowly around the clock, satellites ride them trailing short arcs, and a radar beam sweeps round lighting up contacts as it passes. The assembly leans slightly toward the cursor, satellites link to the pointer and to each other when close, and click ripples light up any contact they cross. It is drawn entirely with line strokes and timed from the frame clock, so it stays light on the CPU and runs at the same pace on any refresh rate. Anyone who had "network" selected is moved to Orbit automatically.
+- **Work Hours Tracker on every clock face**: the Minimal and Analog faces now show the shift percentage with a thin progress bar under the date, and the Analog face also traces the progress around the rim of the dial. Previously only the Cyber face showed it.
+
+### Changed
+
+- **Sharper backdrop on HiDPI screens**: the canvas is now rendered at the display's pixel density (capped at 2x) instead of being stretched from CSS-pixel resolution, so lines and dots are crisp on high-resolution and scaled displays.
+- **Fonts ship with the extension**: Inter and JetBrains Mono are bundled instead of loaded from Google Fonts, so a new tab no longer waits on, or sends a request to, a font CDN and looks the same offline. The unused Space Grotesk font was dropped.
+
+### Fixed
+
+- **Google as the default search engine was being undone**: a leftover migration rewrote a saved `google` default back to `duckduckgo` on every load, even though Settings offers Google. It has been removed.
+- **Typed engine shortcuts no longer change your default**: `/g `, `/yt ` and the other shortcuts now apply to the search being typed only. Backspace on an empty bar (or Escape) drops the shortcut engine again.
+- **URL detection in the search bar**: addresses with a query string, port, or fragment, plus `localhost` and IPv4 addresses, are now opened directly, while file-like queries such as `test.py`, numbers such as `3.14`, and email addresses are searched instead of being treated as sites.
+- **Pinned nodes are real links**: Ctrl/Cmd/Shift-click, middle-click, and the right-click menu now open a node in a new tab or window, and tiles can be focused and opened from the keyboard. The edit/delete buttons also appear when a tile has keyboard focus.
+- **Work Hours Tracker showing "NaN% Active"**: the shift start/end fields are now time pickers instead of free text, and stored values are normalized to `HH:MM`.
+- **A malformed backup or synced value could break the page**: settings from localStorage, sync, and imported backups are rebuilt field by field over the defaults, and pinned sites must have an `http(s)` URL.
+- **Sync**: other open tabs (and other signed-in devices) now pick up changes live; a tab no longer writes its local cache to sync before it has read what is already there; and pinned-site lists larger than Chrome's 8 KB per-item limit are split across several items instead of silently failing to sync.
+- **Escape** now closes the settings drawer and the add/edit node form, and clicking outside the form closes it.
+- **Extension icons are PNG**: the manifest pointed all four icon sizes at an SVG, which Chrome and the Web Store don't accept for extension icons.
+- **`npm run build:zip` and `npm run clean` on Windows**: they depended on `zip` and `rm -rf`. The zip step now uses the `tar` that ships with Windows, and removes any previous archive first so old files can't linger in the upload.
+- **AI portals**: Qwen and Kimi pointed at domains that now redirect (`chat.qwen.ai`, `www.kimi.com`), and the model-version tags, which went stale with every release, are now the vendor name.
+
 ## [1.5.0] - 2026-07-30
 
 ### Added

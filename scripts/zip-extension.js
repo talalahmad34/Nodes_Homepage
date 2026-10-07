@@ -8,8 +8,7 @@
 // version in package.json (e.g. nodes-homepage-extension-1.3.0.zip).
 
 import { execFileSync } from "child_process";
-import { existsSync } from "fs";
-import { readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -28,6 +27,33 @@ const pkg = JSON.parse(
 const zipName = `nodes-homepage-extension-${pkg.version}.zip`;
 const zipPath = path.join(rootDir, zipName);
 
-execFileSync("zip", ["-r", zipPath, "."], { cwd: distDir, stdio: "inherit" });
+// Both tools append to an existing archive, which would leave files from an older
+// build inside the upload.
+rmSync(zipPath, { force: true });
+
+// Passing the top-level entries (rather than ".") keeps "./" prefixes out of the
+// archive's paths.
+const entries = readdirSync(distDir);
+
+if (process.platform === "win32") {
+  // Windows has no `zip` binary, but ships bsdtar, which writes a zip (with forward
+  // slash paths, as the Web Store expects) when given `-a` and a .zip name. It's
+  // called by full path because Git Bash puts GNU tar, which can't write zips,
+  // ahead of it on PATH.
+  const bsdtar = path.join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "tar.exe",
+  );
+  execFileSync(bsdtar, ["-a", "-c", "-f", zipPath, ...entries], {
+    cwd: distDir,
+    stdio: "inherit",
+  });
+} else {
+  execFileSync("zip", ["-r", zipPath, ...entries], {
+    cwd: distDir,
+    stdio: "inherit",
+  });
+}
 
 console.log(`\nPackaged ${zipName} — ready to upload to the Chrome Web Store.`);

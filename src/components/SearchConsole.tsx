@@ -70,17 +70,78 @@ const SEARCH_ENGINES: SearchEngine[] = [
   },
 ];
 
+// Extensions that make a bare "name.ext" far more likely a file being searched for
+// than a site to open (several, like .py, .rs and .sh, are also real TLDs).
+const FILE_EXTENSIONS = new Set(
+  (
+    "py js ts tsx jsx md rs sh pl cc cpp hpp cs go rb php java kt swift json yaml " +
+    "yml toml xml html htm css scss txt pdf zip exe png jpg jpeg gif svg mp3 mp4 " +
+    "mov csv log ini cfg lock sql so ps"
+  ).split(" "),
+);
+
+// Returns the address to open when the query looks like a URL rather than a search:
+// an explicit http(s) link, localhost, an IPv4 address, or a dotted domain name —
+// each optionally with a port, path, query string or fragment.
+function toDirectUrl(input: string): string | null {
+  if (/\s/.test(input)) return null;
+
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      return new URL(input).href;
+    } catch {
+      return null;
+    }
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(`https://${input}`);
+  } catch {
+    return null;
+  }
+  // "user@example.com" parses as a URL with credentials, but is an email address
+  if (parsed.username || parsed.password) return null;
+
+  // Classified from the typed host, not `parsed.hostname`: the URL parser rewrites
+  // numeric hosts, turning a search for "3.14" into the address 3.0.0.14.
+  const host = input.split(/[/?#]/)[0].replace(/:\d+$/, "");
+  const hasPortOrPath = host !== input;
+  const labels = host.split(".");
+  const tld = labels[labels.length - 1].toLowerCase();
+
+  const isLocalhost = host.toLowerCase() === "localhost";
+  const isIpv4 =
+    labels.length === 4 &&
+    labels.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+  const isDomain =
+    labels.length >= 2 &&
+    labels.every((label) => /^[a-z0-9-]+$/i.test(label)) &&
+    /^[a-z]{2,}$/.test(tld);
+
+  if (isLocalhost || isIpv4) return `http://${input}`;
+  if (!isDomain) return null;
+  if (labels.length === 2 && !hasPortOrPath && FILE_EXTENSIONS.has(tld)) {
+    return null;
+  }
+  return `https://${input}`;
+}
+
 export default function SearchConsole({
   settings,
   updateSettings,
   addLog,
 }: SearchConsoleProps) {
   const [query, setQuery] = useState("");
+  // Engine picked by a typed shortcut (e.g. "/g "). It applies to the search being
+  // typed only — the saved default in settings is left alone.
+  const [oneOffEngineId, setOneOffEngineId] = useState<string | null>(null);
   const activeEngine = useMemo(
     () =>
+      SEARCH_ENGINES.find((e) => e.id === oneOffEngineId) ??
       SEARCH_ENGINES.find((e) => e.id === settings.searchEngineId) ??
       SEARCH_ENGINES[1],
-    [settings.searchEngineId],
+    [oneOffEngineId, settings.searchEngineId],
   );
   const activePortals = useMemo(
     () =>
@@ -122,15 +183,23 @@ export default function SearchConsole({
     // Look for matching engine shortcut prefixes (e.g. "/g ")
     for (const engine of SEARCH_ENGINES) {
       if (val.startsWith(`${engine.shortcut} `)) {
-        updateSettings("searchEngineId", engine.id);
+        setOneOffEngineId(engine.id);
         setQuery(val.substring(engine.shortcut.length + 1));
         addLog(
           "SYS",
           "success",
-          `Active routing engine switched to ${engine.name} via shortcut`,
+          `Routing engine set to ${engine.name} for this query via shortcut`,
         );
         break;
       }
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Backspace on an empty bar (or Escape) drops a shortcut-selected engine
+    if (!oneOffEngineId) return;
+    if (e.key === "Escape" || (e.key === "Backspace" && query === "")) {
+      setOneOffEngineId(null);
     }
   };
 
@@ -148,15 +217,10 @@ export default function SearchConsole({
     // Let the user know the target, and then execute client-side redirect
     let targetUrl = activeEngine.url + encodeURIComponent(trimmedQuery);
 
-    // Check if the query itself is a valid looking URL - if so we can offer to navigate directly!
-    const isUrl =
-      /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/.test(
-        trimmedQuery,
-      );
-    if (isUrl) {
-      targetUrl = trimmedQuery.startsWith("http")
-        ? trimmedQuery
-        : `https://${trimmedQuery}`;
+    // If the query itself looks like a URL, navigate to it directly instead
+    const directUrl = toDirectUrl(trimmedQuery);
+    if (directUrl) {
+      targetUrl = directUrl;
       addLog(
         "NET",
         "info",
@@ -171,6 +235,7 @@ export default function SearchConsole({
 
   const selectEngine = (engine: SearchEngine) => {
     updateSettings("searchEngineId", engine.id);
+    setOneOffEngineId(null);
     addLog("SYS", "info", `Routing engine changed manually: ${engine.name}`);
     setIsEngineMenuOpen(false);
     inputRef.current?.focus();
@@ -301,6 +366,7 @@ export default function SearchConsole({
           type="text"
           value={query}
           onChange={handleInputChange}
+          onKeyDown={handleInputKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholder={activeEngine.placeholder}
