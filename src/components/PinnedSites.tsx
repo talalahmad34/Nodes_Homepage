@@ -28,6 +28,14 @@ import {
   TILT_SPRING,
 } from "../lib/motion";
 import { emitPulse } from "../lib/pulseBus";
+import { trackCursorLight } from "../lib/cursorLight";
+import WarpBurst, { WARP_BURST_MS } from "./WarpBurst";
+import {
+  TILE_BOOT_DELAY,
+  TILE_BOOT_STAGGER,
+  isBooting,
+  msUntilBootEnds,
+} from "../lib/boot";
 
 // Free, no-key-required favicon lookup service — used for the "Site Favicon" icon option.
 const getFaviconUrl = (rawUrl: string): string => {
@@ -86,6 +94,7 @@ function TiltCard({
     const rect = e.currentTarget.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width - 0.5;
     const py = (e.clientY - rect.top) / rect.height - 0.5;
+    trackCursorLight(e);
     rotateY.set(px * TILT_MAX_DEG * 2);
     rotateX.set(-py * TILT_MAX_DEG * 2);
   };
@@ -138,10 +147,19 @@ export default function PinnedSites({
   addLog,
 }: PinnedSitesProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // While the tab is booting, tiles wait for the clock and search bar and then drop
+  // in as a wave. Afterwards (e.g. a node added later) they appear straight away.
+  const [bootDelay, setBootDelay] = useState(() =>
+    isBooting() ? TILE_BOOT_DELAY : 0,
+  );
+  React.useEffect(() => {
+    const timer = setTimeout(() => setBootDelay(0), msUntilBootEnds());
+    return () => clearTimeout(timer);
+  }, []);
   const [editingSite, setEditingSite] = useState<PinnedSite | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   // Position of the most recent tile activation, used to render the launch burst overlay.
-  // `seq` only has to differ between consecutive launches so AnimatePresence remounts the
+  // `seq` only has to differ between consecutive launches so WarpBurst remounts the
   // burst and replays it, even when the same tile is activated twice.
   const [launch, setLaunch] = useState<{
     seq: number;
@@ -419,7 +437,12 @@ export default function PinnedSites({
     const cy = rect.top + rect.height / 2;
     emitPulse(cx, cy);
     launchSeqRef.current += 1;
-    setLaunch({ seq: launchSeqRef.current, x: cx, y: cy });
+    const seq = launchSeqRef.current;
+    setLaunch({ seq, x: cx, y: cy });
+    // Unmount once the keyframes have finished, unless a newer burst replaced it
+    setTimeout(() => {
+      setLaunch((current) => (current?.seq === seq ? null : current));
+    }, WARP_BURST_MS);
   };
 
   // Tiles are real links, so the browser handles everything except a plain left
@@ -477,7 +500,7 @@ export default function PinnedSites({
         return {
           text: "text-emerald-400",
           border: "border-emerald-500/20",
-          hoverBorder: "group-hover:border-emerald-400/50",
+          hoverBorder: "group-hover:border-emerald-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]",
           glowRGB: "52, 211, 153",
           modalBtn: "bg-emerald-500 hover:bg-emerald-600",
@@ -486,7 +509,7 @@ export default function PinnedSites({
         return {
           text: "text-cyan-400",
           border: "border-cyan-500/20",
-          hoverBorder: "group-hover:border-cyan-400/50",
+          hoverBorder: "group-hover:border-cyan-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(34,211,238,0.3)]",
           glowRGB: "34, 211, 238",
           modalBtn: "bg-cyan-500 hover:bg-cyan-600",
@@ -495,7 +518,7 @@ export default function PinnedSites({
         return {
           text: "text-amber-400",
           border: "border-amber-500/20",
-          hoverBorder: "group-hover:border-amber-400/50",
+          hoverBorder: "group-hover:border-amber-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(251,191,36,0.3)]",
           glowRGB: "251, 191, 36",
           modalBtn: "bg-amber-500 hover:bg-amber-600",
@@ -504,7 +527,7 @@ export default function PinnedSites({
         return {
           text: "text-purple-400",
           border: "border-purple-500/20",
-          hoverBorder: "group-hover:border-purple-400/50",
+          hoverBorder: "group-hover:border-purple-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(192,132,252,0.3)]",
           glowRGB: "192, 132, 252",
           modalBtn: "bg-purple-500 hover:bg-purple-600",
@@ -513,7 +536,7 @@ export default function PinnedSites({
         return {
           text: "text-rose-400",
           border: "border-rose-500/20",
-          hoverBorder: "group-hover:border-rose-400/50",
+          hoverBorder: "group-hover:border-rose-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(251,113,133,0.3)]",
           glowRGB: "251, 113, 133",
           modalBtn: "bg-rose-500 hover:bg-rose-600",
@@ -522,7 +545,7 @@ export default function PinnedSites({
         return {
           text: "text-emerald-400",
           border: "border-emerald-500/20",
-          hoverBorder: "group-hover:border-emerald-400/50",
+          hoverBorder: "group-hover:border-emerald-400/30",
           iconGlow: "group-hover:shadow-[0_0_12px_rgba(52,211,153,0.3)]",
           glowRGB: "52, 211, 153",
           modalBtn: "bg-emerald-500 hover:bg-emerald-600",
@@ -640,11 +663,18 @@ export default function PinnedSites({
           return (
             <motion.div
               key={site.id}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: bootDelay ? -18 : 12, scale: 0.95 }}
               animate={{
                 opacity: isDraggedIdx ? 0.35 : 1,
                 y: 0,
-                transition: { delay: index * 0.02 },
+                scale: 1,
+                transition: {
+                  delay:
+                    bootDelay + index * (bootDelay ? TILE_BOOT_STAGGER : 0.02),
+                  type: "spring",
+                  stiffness: 240,
+                  damping: 20,
+                },
               }}
               whileHover={
                 isDraggedIdx
@@ -683,12 +713,12 @@ export default function PinnedSites({
                   // The tile is reordered by its grip handle; without this the
                   // browser would start dragging the link itself instead.
                   draggable={false}
-                  className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border bg-neutral-900/20 backdrop-blur-sm cursor-pointer transition-all duration-300 outline-none focus-visible:border-neutral-400 ${
+                  className={`relative h-[110px] w-full p-3 flex flex-col justify-between rounded-xl border glass-panel cursor-light cursor-pointer transition-all duration-300 outline-none focus-visible:border-neutral-400 ${
                     isDraggedIdx
                       ? "border-dashed border-neutral-700/85 scale-95 opacity-50 bg-neutral-950/60"
                       : isHoveredIdx
                         ? `border-neutral-500 scale-102 bg-neutral-900/35 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
-                        : `${colors.border} ${colors.hoverBorder} hover:bg-neutral-900/35`
+                        : `border-white/[0.07] ${colors.hoverBorder} hover:bg-neutral-900/35`
                   }`}
                   onClick={(e) => handleCardClick(e, site.id, site.url)}
                   onAuxClick={(e) => {
@@ -841,69 +871,9 @@ export default function PinnedSites({
         </div>
       )}
 
-      {/* Packet-launch burst: fired from the centre of an activated tile as the
-          navigation is queued, reading as the outbound socket stream leaving the node. */}
-      <AnimatePresence>
-        {launch && (
-          <motion.div
-            key={launch.seq}
-            className="fixed pointer-events-none z-50"
-            style={{ left: launch.x, top: launch.y }}
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.42, ease: "easeOut" }}
-            onAnimationComplete={() => setLaunch(null)}
-          >
-            {/* Expanding shock ring */}
-            <motion.span
-              className="absolute rounded-full border-2"
-              style={{
-                borderColor: `rgba(${colors.glowRGB}, 0.9)`,
-                translateX: "-50%",
-                translateY: "-50%",
-              }}
-              initial={{ width: 12, height: 12, opacity: 0.9 }}
-              animate={{ width: 190, height: 190, opacity: 0 }}
-              transition={{ duration: 0.42, ease: "easeOut" }}
-            />
-            {/* Bright core flash */}
-            <motion.span
-              className="absolute rounded-full"
-              style={{
-                backgroundColor: `rgba(${colors.glowRGB}, 1)`,
-                boxShadow: `0 0 22px 8px rgba(${colors.glowRGB}, 0.6)`,
-                translateX: "-50%",
-                translateY: "-50%",
-              }}
-              initial={{ width: 16, height: 16, opacity: 1 }}
-              animate={{ width: 4, height: 4, opacity: 0 }}
-              transition={{ duration: 0.34, ease: "easeOut" }}
-            />
-            {/* Four packets streaking outward along the axes */}
-            {[
-              [0, -1],
-              [0, 1],
-              [-1, 0],
-              [1, 0],
-            ].map(([dx, dy], i) => (
-              <motion.span
-                key={i}
-                className="absolute w-1.5 h-1.5 rounded-full"
-                style={{
-                  backgroundColor: "#ffffff",
-                  boxShadow: `0 0 10px 3px rgba(${colors.glowRGB}, 0.85)`,
-                  translateX: "-50%",
-                  translateY: "-50%",
-                }}
-                initial={{ x: 0, y: 0, opacity: 1 }}
-                animate={{ x: dx * 130, y: dy * 130, opacity: 0 }}
-                transition={{ duration: 0.42, ease: "easeOut" }}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Launch burst: fired from the centre of an activated tile as the navigation is
+          queued, reading as the outbound socket stream leaving the node. */}
+      {launch && <WarpBurst seq={launch.seq} x={launch.x} y={launch.y} />}
 
       {/* Cyber Register / Edit Site Overlay popup modal */}
       <AnimatePresence>

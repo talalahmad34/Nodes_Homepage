@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Globe, Wifi, Cpu } from "lucide-react";
 import { UserSettings } from "../types";
 import { useAnimatedNumber } from "../lib/useAnimatedNumber";
+import { trackCursorLight } from "../lib/cursorLight";
 
 interface FuturisticClockProps {
   settings: UserSettings;
@@ -50,6 +51,44 @@ interface ClockFaceProps {
   displayRx: number;
 }
 
+// The clock is the largest glass panel, so it gets a deeper blur and a wider cursor
+// light than the node tiles.
+const CLOCK_GLASS_STYLE = {
+  "--glass-blur": "10px",
+  "--light-size": "420px",
+} as CSSProperties;
+
+// Renders a number so that each digit rolls upward out of the way of its replacement
+// when it changes — used for hours and minutes, so the clock visibly ticks over.
+function RollingDigits({ value }: { value: string }) {
+  return (
+    <span className="inline-flex">
+      {value.split("").map((digit, i) => (
+        // clip-path rather than overflow-hidden: an overflow box would move the
+        // digit's baseline and misalign it with the colons beside it.
+        <span
+          key={i}
+          className="relative inline-block"
+          style={{ clipPath: "inset(0)" }}
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={digit}
+              className="inline-block"
+              initial={{ y: "70%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "-70%", opacity: 0 }}
+              transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+            >
+              {digit}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // The original dense, data-heavy face: date banner, big digits, telemetry footer,
 // and an optional binary-matrix readout underneath.
 function CyberFace({
@@ -67,8 +106,10 @@ function CyberFace({
 }: ClockFaceProps) {
   return (
     <div
-      className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border ${colors.border} bg-neutral-900/20 backdrop-blur-sm shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
+      className={`relative w-full py-4 sm:py-5 px-6 sm:px-8 rounded-2xl border border-white/[0.07] glass-panel cursor-light boot-panel flex flex-col items-center justify-center overflow-hidden z-10`}
       id="clock-shield"
+      onMouseMove={trackCursorLight}
+      style={CLOCK_GLASS_STYLE}
     >
       {/* Futuristic layout grids inside clock */}
       <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-neutral-500/20 to-transparent" />
@@ -112,13 +153,13 @@ function CyberFace({
 
       {/* The Digital Clock Face */}
       <div
-        className="flex items-baseline font-mono z-10 select-none pb-1 relative"
+        className="flex items-baseline font-mono z-10 select-none pb-1 relative boot-flicker"
         id="clock-timestamp-readout"
       >
         <span
           className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}
         >
-          {formattedHours}
+          <RollingDigits value={formattedHours} />
         </span>
 
         <motion.span
@@ -132,7 +173,7 @@ function CyberFace({
         <span
           className={`text-5xl sm:text-6xl md:text-7xl font-semibold tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]`}
         >
-          {formattedMins}
+          <RollingDigits value={formattedMins} />
         </span>
 
         {settings.showSeconds && (
@@ -262,21 +303,23 @@ function MinimalFace({
 }: ClockFaceProps) {
   return (
     <div
-      className={`relative w-full py-8 sm:py-10 px-6 rounded-2xl border ${colors.border} bg-neutral-900/20 backdrop-blur-sm shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
+      className={`relative w-full py-8 sm:py-10 px-6 rounded-2xl border border-white/[0.07] glass-panel cursor-light boot-panel flex flex-col items-center justify-center overflow-hidden z-10`}
       id="clock-shield"
+      onMouseMove={trackCursorLight}
+      style={CLOCK_GLASS_STYLE}
     >
       <div
-        className="flex items-baseline font-mono z-10 select-none"
+        className="flex items-baseline font-mono z-10 select-none boot-flicker"
         id="clock-timestamp-readout"
       >
         <span className="text-6xl sm:text-7xl md:text-8xl font-light tracking-tight text-white">
-          {formattedHours}
+          <RollingDigits value={formattedHours} />
         </span>
         <span className="text-6xl sm:text-7xl md:text-8xl font-thin text-neutral-500 mx-2">
           :
         </span>
         <span className="text-6xl sm:text-7xl md:text-8xl font-light tracking-tight text-white">
-          {formattedMins}
+          <RollingDigits value={formattedMins} />
         </span>
         {settings.showSeconds && (
           <span className="text-2xl sm:text-3xl font-light text-neutral-500 ml-3 w-[1.25em] inline-block">
@@ -333,12 +376,14 @@ function AnalogFace({
 
   return (
     <div
-      className={`relative w-full py-6 sm:py-7 px-6 rounded-2xl border ${colors.border} bg-neutral-900/20 backdrop-blur-sm shadow-2xl flex flex-col items-center justify-center overflow-hidden z-10`}
+      className={`relative w-full py-6 sm:py-7 px-6 rounded-2xl border border-white/[0.07] glass-panel cursor-light boot-panel flex flex-col items-center justify-center overflow-hidden z-10`}
       id="clock-shield"
+      onMouseMove={trackCursorLight}
+      style={CLOCK_GLASS_STYLE}
     >
       <svg
         viewBox="0 0 200 200"
-        className="w-40 h-40 sm:w-48 sm:h-48 select-none"
+        className="w-40 h-40 sm:w-48 sm:h-48 select-none boot-flicker"
         role="img"
         aria-label={`Analog clock reading ${time.toLocaleTimeString()}`}
       >

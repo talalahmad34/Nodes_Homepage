@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useRef } from "react";
+import { canvasBootProgress } from "../lib/boot";
 import { onPulse } from "../lib/pulseBus";
 
 interface Particle {
@@ -365,8 +366,9 @@ export default function NetworkBackground({
       subtree: true,
     });
 
-    const drawOrbit = (t: number) => {
+    const drawOrbit = (t: number, boot: number) => {
       const mouse = mouseRef.current;
+      const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
 
       // Lean the whole assembly a few pixels toward the cursor, easing into place
       const leanX = mouse.active ? (mouse.x - hubHome.x) * 0.03 : 0;
@@ -376,14 +378,20 @@ export default function NetworkBackground({
       const cx = hub.x;
       const cy = hub.y;
 
-      rings.forEach((ring) => {
+      // Boot: rings expand outward from the clock one after another, the inner ones
+      // leading, each fading up and unrolling its segments as it grows.
+      rings.forEach((ring, i) => {
+        const grow = easeOut(Math.min(1, Math.max(0, boot * 2.1 - i * 0.16)));
+        if (grow <= 0) return;
         const rotation = t * ring.speed;
+        const radius = ring.radius * grow;
+        ctx.globalAlpha = grow;
 
         // Faint full track
         ctx.strokeStyle = `rgba(${colors.rgb}, 0.07)`;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(cx, cy, ring.radius, 0, TAU);
+        ctx.arc(cx, cy, radius, 0, TAU);
         ctx.stroke();
 
         // One ring carries graduation ticks: a wide stroke dashed so finely that
@@ -391,9 +399,9 @@ export default function NetworkBackground({
         if (ring.ticked) {
           ctx.strokeStyle = `rgba(${colors.rgb}, 0.2)`;
           ctx.lineWidth = 7;
-          ctx.setLineDash([1.5, (ring.radius * TAU) / 90 - 1.5]);
+          ctx.setLineDash([1.5, (radius * TAU) / 90 - 1.5]);
           ctx.beginPath();
-          ctx.arc(cx, cy, ring.radius, rotation, rotation + TAU);
+          ctx.arc(cx, cy, radius, rotation, rotation + TAU);
           ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -404,10 +412,18 @@ export default function NetworkBackground({
         ring.arcs.forEach((arc) => {
           const start = arc.start + rotation;
           ctx.beginPath();
-          ctx.arc(cx, cy, ring.radius, start, start + arc.length);
+          ctx.arc(cx, cy, radius, start, start + arc.length * grow);
           ctx.stroke();
         });
       });
+
+      // The beam, contacts and satellites switch on once the rings are mostly out
+      const live = Math.min(1, Math.max(0, (boot - 0.6) / 0.4));
+      ctx.globalAlpha = live;
+      if (live <= 0) {
+        ctx.globalAlpha = 1;
+        return;
+      }
 
       // Radar beam: a leading line with a fan of fainter ones trailing behind it
       const sweep = (t * ORBIT_SWEEP_SPEED) % TAU;
@@ -515,6 +531,7 @@ export default function NetworkBackground({
           }
         }
       }
+      ctx.globalAlpha = 1;
     };
 
     const draw = (now: number) => {
@@ -577,7 +594,7 @@ export default function NetworkBackground({
       }
 
       if (bgType === "orbit") {
-        drawOrbit(now / 1000);
+        drawOrbit(now / 1000, canvasBootProgress(now));
       }
 
       // Drifting stars
@@ -904,7 +921,7 @@ export default function NetworkBackground({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full block"
+        className="w-full h-full block boot-fade"
         id="cyber-network-canvas"
       />
     </div>

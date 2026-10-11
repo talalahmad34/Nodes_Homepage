@@ -16,6 +16,7 @@ A premium, minimal New Tab homepage extension featuring a responsive digital clo
 - **Custom Pinned Shortcut Nodes:** Grid launcher for your favorite destinations with customizable network ports, connection labels, and drag-and-drop sorting (or Arrow keys, for keyboard-only reordering).
 - **Integrated Search Console:** Directly execute web searches. Supports command routers on the fly (e.g., `/g` for Google, `/d` for DuckDuckGo), plus an inline engine picker that expands within the search bar.
 - **Live System Telemetry:** Simulated CPU diagnostics, latency ping metrics, and packet streams — with counters that ease between values rather than snapping — to create a dynamic cybernetic vibe.
+- **Liquid Glass & Boot Sequence:** Panels are clear, rim-lit glass with a cursor-following light, and each new tab powers on with a short boot animation.
 - **Dynamic Canvas Backgrounds:** An orbiting ring-and-radar system centred on the clock, a starfield, or a living circuit-board grid — all of which ripple and connect to cursor movement.
 - **Free Cross-Device Sync:** Settings and pinned nodes sync through `chrome.storage.sync` (built into Chrome, no account or cost), falling back to `localStorage` outside a packaged extension.
 - **Backup & Restore:** Export your configuration as JSON via copy/paste or a downloadable file, and import it back — with structural validation before anything is applied.

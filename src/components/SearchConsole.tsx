@@ -15,7 +15,9 @@ import {
   CARD_TAP,
   CARD_SPRING,
 } from "../lib/motion";
-import { ALL_AI_PORTALS } from "../lib/aiPortals";
+import { ALL_AI_PORTALS, type AiPortal } from "../lib/aiPortals";
+import { emitPulse } from "../lib/pulseBus";
+import WarpBurst, { WARP_BURST_MS } from "./WarpBurst";
 
 interface SearchConsoleProps {
   settings: UserSettings;
@@ -26,6 +28,10 @@ interface SearchConsoleProps {
     message: string,
   ) => void;
 }
+
+// How long a portal click is held so its warp effect can play before the new tab
+// takes focus, in ms.
+const PORTAL_WARP_MS = 420;
 
 const SEARCH_ENGINES: SearchEngine[] = [
   {
@@ -152,6 +158,16 @@ export default function SearchConsole({
   );
   const [isFocused, setIsFocused] = useState(false);
   const [isEngineMenuOpen, setIsEngineMenuOpen] = useState(false);
+  // The most recent portal activation: where it happened (for the burst overlay) and
+  // on which card (for the light band). `seq` differs every time so a repeat click on
+  // the same portal replays the effect.
+  const [warp, setWarp] = useState<{
+    seq: number;
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const warpSeqRef = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const engineMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -233,6 +249,45 @@ export default function SearchConsole({
     }, 150);
   };
 
+  // Plays the warp effect for a portal: a ripple through the backdrop canvas, the
+  // burst overlay at the activation point, and the light band across its card.
+  const openWarp = (e: React.MouseEvent<HTMLElement>, portal: AiPortal) => {
+    addLog(
+      "EXT",
+      "info",
+      `Direct linkage: Routed telemetry query to ${portal.name} node`,
+    );
+    // Keyboard activation reports the pointer at 0,0 — use the card's centre instead
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fromPointer = e.clientX !== 0 || e.clientY !== 0;
+    const x = fromPointer ? e.clientX : rect.left + rect.width / 2;
+    const y = fromPointer ? e.clientY : rect.top + rect.height / 2;
+    emitPulse(x, y);
+    warpSeqRef.current += 1;
+    const seq = warpSeqRef.current;
+    setWarp({ seq, id: portal.id, x, y });
+    // Unmount once the keyframes have finished, unless a newer burst replaced it
+    setTimeout(() => {
+      setWarp((current) => (current?.seq === seq ? null : current));
+    }, WARP_BURST_MS);
+  };
+
+  const handlePortalClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    portal: AiPortal,
+  ) => {
+    openWarp(e, portal);
+    // Modifier clicks keep the browser's own behaviour (background tab, new window)
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+    // The portal opens in a new tab that takes focus straight away, so hold it back
+    // just long enough for the effect to be seen.
+    e.preventDefault();
+    setTimeout(() => {
+      window.open(portal.url, "_blank", "noopener,noreferrer");
+    }, PORTAL_WARP_MS);
+  };
+
   const selectEngine = (engine: SearchEngine) => {
     updateSettings("searchEngineId", engine.id);
     setOneOffEngineId(null);
@@ -244,17 +299,17 @@ export default function SearchConsole({
   const getThemeColor = () => {
     switch (settings.themeId) {
       case "emerald":
-        return "text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
+        return "text-emerald-400 border-white/[0.08] shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
       case "cyan":
-        return "text-cyan-400 border-cyan-500/20 shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20";
+        return "text-cyan-400 border-white/[0.08] shadow-cyan-500/5 ring-cyan-500/10 focus-within:border-cyan-400 focus-within:ring-cyan-400/20";
       case "amber":
-        return "text-amber-400 border-amber-500/20 shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20";
+        return "text-amber-400 border-white/[0.08] shadow-amber-500/5 ring-amber-500/10 focus-within:border-amber-400 focus-within:ring-amber-400/20";
       case "purple":
-        return "text-purple-400 border-purple-500/20 shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20";
+        return "text-purple-400 border-white/[0.08] shadow-purple-500/5 ring-purple-500/10 focus-within:border-purple-400 focus-within:ring-purple-400/20";
       case "rose":
-        return "text-rose-400 border-rose-500/20 shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20";
+        return "text-rose-400 border-white/[0.08] shadow-rose-500/5 ring-rose-500/10 focus-within:border-rose-400 focus-within:ring-rose-400/20";
       default:
-        return "text-emerald-400 border-emerald-500/20 shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
+        return "text-emerald-400 border-white/[0.08] shadow-emerald-500/5 ring-emerald-500/10 focus-within:border-emerald-400 focus-within:ring-emerald-400/20";
     }
   };
 
@@ -285,12 +340,12 @@ export default function SearchConsole({
     >
       <form
         onSubmit={handleSearchSubmit}
-        className={`w-full flex items-center bg-neutral-950/80 backdrop-blur-md rounded-xl border ${themeClass} shadow-xl ring-1 transition-all duration-300 py-1.5 pl-4 pr-2.5 z-10`}
+        className={`w-full flex items-center glass-panel [--glass-tint:0.5] rounded-xl border ${themeClass} transition-all duration-300 py-1.5 pl-4 pr-2.5 z-10 boot-draw`}
         style={
           isFocused
             ? {
-                boxShadow: `0 0 20px ${accentColor}35, inset 0 0 10px ${accentColor}15`,
-                borderColor: accentColor,
+                boxShadow: `0 0 18px ${accentColor}1f, inset 0 0 10px ${accentColor}0d, inset 0 1px 0.5px rgba(255, 255, 255, 0.17)`,
+                borderColor: `${accentColor}66`,
               }
             : undefined
         }
@@ -395,7 +450,7 @@ export default function SearchConsole({
           className="w-full mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 z-10"
           id="dedicated-ai-terminals-wrapper"
         >
-          {activePortals.map((portal) => {
+          {activePortals.map((portal, portalIndex) => {
             return (
               <motion.a
                 key={portal.id}
@@ -404,13 +459,10 @@ export default function SearchConsole({
                 href={portal.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() =>
-                  addLog(
-                    "EXT",
-                    "info",
-                    `Direct linkage: Routed telemetry query to ${portal.name} node`,
-                  )
-                }
+                onClick={(e) => handlePortalClick(e, portal)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) openWarp(e, portal);
+                }}
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   e.currentTarget.style.setProperty(
@@ -422,15 +474,29 @@ export default function SearchConsole({
                     `${e.clientY - rect.top}px`,
                   );
                 }}
-                className="relative p-2.5 rounded-xl border border-neutral-900 bg-neutral-950/50 hover:bg-neutral-900/40 hover:border-neutral-800 transition-colors duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left"
+                className="relative p-2.5 rounded-xl border border-white/[0.06] glass-panel hover:border-white/[0.14] transition-colors duration-300 group flex items-start justify-between cursor-pointer overflow-hidden text-left boot-rise"
                 style={
                   {
+                    borderColor:
+                      warp?.id === portal.id ? accentColor : undefined,
                     "--hover-glow": accentColor,
+                    animationDelay: `${0.7 + portalIndex * 0.06}s`,
                     "--mouse-x": "50%",
                     "--mouse-y": "50%",
                   } as React.CSSProperties
                 }
               >
+                {/* Warp: a band of light tears across the card as its portal opens */}
+                {warp?.id === portal.id && (
+                  <div
+                    key={warp.seq}
+                    className="warp-sweep absolute inset-y-0 left-0 w-2/3 pointer-events-none z-20"
+                    style={{
+                      background: `linear-gradient(100deg, transparent, ${accentColor}55 42%, #ffffffb0 50%, ${accentColor}55 58%, transparent)`,
+                    }}
+                  />
+                )}
+
                 {/* Dynamic theme mouse spotlight glow when hovered */}
                 <div
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
@@ -479,6 +545,9 @@ export default function SearchConsole({
           })}
         </div>
       )}
+
+      {/* Portal warp burst at the point a model portal was activated */}
+      {warp && <WarpBurst seq={warp.seq} x={warp.x} y={warp.y} />}
     </div>
   );
 }

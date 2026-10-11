@@ -9,6 +9,7 @@ import {
   useCallback,
   useRef,
   type ChangeEvent,
+  type CSSProperties,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -527,9 +528,16 @@ export default function App() {
 
   const currentTheme =
     THEMES.find((th) => th.id === settings.themeId) || THEMES[0];
+  // "#22d3ee" -> "34, 211, 238", exposed to CSS as --glow-rgb for the cursor light
+  const accentRgb = [1, 3, 5]
+    .map((i) => parseInt(currentTheme.accent.slice(i, i + 2), 16))
+    .join(", ");
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center justify-between text-[#A0A0A5] overflow-x-hidden font-sans pb-3 sm:pb-5 select-none bg-transparent">
+    <div
+      className="relative min-h-screen w-full flex flex-col items-center justify-between text-[#A0A0A5] overflow-x-hidden font-sans pb-3 sm:pb-5 select-none bg-transparent"
+      style={{ "--glow-rgb": accentRgb } as CSSProperties}
+    >
       {/* Absolute solid background behind everything to keep -z-20 canvas visible */}
       <div className="absolute inset-0 bg-[#050506] -z-30 pointer-events-none" />
 

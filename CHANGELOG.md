@@ -2,6 +2,20 @@
 
 All notable changes to the **Nodes Homepage Extension** project will be documented in this file.
 
+## [1.7.0] - 2026-10-11
+
+### Added
+
+- **Boot sequence**: opening a tab now plays a short power-on, once: the orbit rings expand outward from the clock one after another, the clock panel settles in and its digits flicker on like a display warming up, the search bar wipes in from the left, and the AI portals and node tiles arrive in a staggered wave. It runs for about two seconds and leaves nothing running afterwards.
+- **Cursor light**: a soft highlight in the theme colour now follows the pointer across the surface and along the border of the clock panel and every node tile.
+- **Rolling clock digits**: on the Cyber and Minimal faces, hour and minute digits roll upward out of the way of their replacement when they change, instead of swapping instantly.
+- **Same warp burst on pinned nodes**: activating a node now plays the portal warp burst from the tile, replacing the older shock-ring burst. Both are driven by CSS keyframes that animate only transform and opacity, so they run on the compositor and no longer stutter.
+- **Portal warp on AI portals**: clicking a model portal now opens a rift at the click point (rings tearing outward, a counter-rotating dashed halo, a spray of light rays and a collapsing core), sends a band of light across the card, and ripples the backdrop. The new tab is held back about 0.4s so the effect can be seen; Ctrl/Shift/middle-click still open it the browser's usual way.
+
+### Changed
+
+- **Liquid glass panels**: the clock, search bar, AI portals and node tiles are now clear, thick-looking glass instead of flat outlined boxes: the backdrop shows through lightly blurred but brighter and more saturated, with a crisp bright rim along the top edge, a soft inner glow, a theme-tinted pool of light at the base, and a diagonal sheen.
+
 ## [1.6.0] - 2026-10-07
 
 ### Added
