@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, ChevronDown, Terminal, Sparkles } from "lucide-react";
-import { SearchEngine, UserSettings } from "../types";
+import { PinnedSite, SearchEngine, UserSettings } from "../types";
 import {
   BTN_HOVER,
   BTN_TAP,
@@ -17,16 +17,19 @@ import {
 } from "../lib/motion";
 import { ALL_AI_PORTALS, type AiPortal } from "../lib/aiPortals";
 import { emitPulse } from "../lib/pulseBus";
+import { isTypingTarget } from "../lib/quickLaunch";
 import WarpBurst, { WARP_BURST_MS } from "./WarpBurst";
 
 interface SearchConsoleProps {
   settings: UserSettings;
   updateSettings: (key: keyof UserSettings, value: any) => void;
-  addLog: (
-    module: "SYS" | "NET" | "IO" | "EXT",
-    type: "info" | "success" | "warning" | "packet",
-    message: string,
-  ) => void;
+  // False while a panel covers the page, so "/" doesn't pull focus from it.
+  shortcutsEnabled: boolean;
+  // Quick launch: reports the typed text so pinned sites can be matched against it,
+  // and receives the best match back to offer on Tab.
+  onQueryChange: (query: string) => void;
+  topMatch: PinnedSite | null;
+  onOpenMatch: () => void;
 }
 
 // How long a portal click is held so its warp effect can play before the new tab
@@ -136,7 +139,10 @@ function toDirectUrl(input: string): string | null {
 export default function SearchConsole({
   settings,
   updateSettings,
-  addLog,
+  shortcutsEnabled,
+  onQueryChange,
+  topMatch,
+  onOpenMatch,
 }: SearchConsoleProps) {
   const [query, setQuery] = useState("");
   // Engine picked by a typed shortcut (e.g. "/g "). It applies to the search being
@@ -191,6 +197,24 @@ export default function SearchConsole({
     inputRef.current?.focus();
   }, []);
 
+  // Pinned sites are matched against plain text only, not an engine-shortcut search
+  useEffect(() => {
+    onQueryChange(oneOffEngineId ? "" : query);
+  }, [query, oneOffEngineId, onQueryChange]);
+
+  // "/" jumps to the search bar from anywhere on the page
+  useEffect(() => {
+    if (!shortcutsEnabled) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [shortcutsEnabled]);
+
   // Parse quick command shortcuts in search box
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -201,17 +225,19 @@ export default function SearchConsole({
       if (val.startsWith(`${engine.shortcut} `)) {
         setOneOffEngineId(engine.id);
         setQuery(val.substring(engine.shortcut.length + 1));
-        addLog(
-          "SYS",
-          "success",
-          `Routing engine set to ${engine.name} for this query via shortcut`,
-        );
         break;
       }
     }
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Tab launches the best-matching pinned site; Escape clears the bar
+    if (e.key === "Tab" && !e.shiftKey && topMatch) {
+      e.preventDefault();
+      onOpenMatch();
+      return;
+    }
+    if (e.key === "Escape" && query !== "") setQuery("");
     // Backspace on an empty bar (or Escape) drops a shortcut-selected engine
     if (!oneOffEngineId) return;
     if (e.key === "Escape" || (e.key === "Backspace" && query === "")) {
@@ -224,11 +250,6 @@ export default function SearchConsole({
     if (!query.trim()) return;
 
     const trimmedQuery = query.trim();
-    addLog(
-      "NET",
-      "success",
-      `Search transmission initialized: engine=${activeEngine.name} payload="${trimmedQuery}"`,
-    );
 
     // Let the user know the target, and then execute client-side redirect
     let targetUrl = activeEngine.url + encodeURIComponent(trimmedQuery);
@@ -237,11 +258,6 @@ export default function SearchConsole({
     const directUrl = toDirectUrl(trimmedQuery);
     if (directUrl) {
       targetUrl = directUrl;
-      addLog(
-        "NET",
-        "info",
-        `Direct routing detected. Navigating directly to node: ${targetUrl}`,
-      );
     }
 
     setTimeout(() => {
@@ -252,11 +268,6 @@ export default function SearchConsole({
   // Plays the warp effect for a portal: a ripple through the backdrop canvas, the
   // burst overlay at the activation point, and the light band across its card.
   const openWarp = (e: React.MouseEvent<HTMLElement>, portal: AiPortal) => {
-    addLog(
-      "EXT",
-      "info",
-      `Direct linkage: Routed telemetry query to ${portal.name} node`,
-    );
     // Keyboard activation reports the pointer at 0,0 — use the card's centre instead
     const rect = e.currentTarget.getBoundingClientRect();
     const fromPointer = e.clientX !== 0 || e.clientY !== 0;
@@ -291,7 +302,6 @@ export default function SearchConsole({
   const selectEngine = (engine: SearchEngine) => {
     updateSettings("searchEngineId", engine.id);
     setOneOffEngineId(null);
-    addLog("SYS", "info", `Routing engine changed manually: ${engine.name}`);
     setIsEngineMenuOpen(false);
     inputRef.current?.focus();
   };
@@ -428,6 +438,26 @@ export default function SearchConsole({
           className="w-full bg-transparent border-none outline-none text-base text-neutral-100 font-mono py-2 tracking-wide placeholder-neutral-600 focus:ring-0 focus:border-none focus:outline-none"
           id="search-input"
         />
+
+        {topMatch && (
+          <button
+            type="button"
+            onClick={onOpenMatch}
+            title={`Open ${topMatch.title}`}
+            className="flex items-center gap-1.5 shrink-0 mr-2 px-2 py-1 rounded-md border border-white/[0.08] bg-white/[0.03] hover:border-white/[0.18] font-mono text-[11px] transition-colors cursor-pointer"
+            id="quick-launch-chip"
+          >
+            <kbd className="px-1 py-px rounded bg-neutral-800 text-neutral-300 text-[10px] font-mono">
+              Tab
+            </kbd>
+            <span
+              className="max-w-[9rem] truncate"
+              style={{ color: accentColor }}
+            >
+              {topMatch.title}
+            </span>
+          </button>
+        )}
 
         <motion.button
           whileHover={BTN_HOVER}

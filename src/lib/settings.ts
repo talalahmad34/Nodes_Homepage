@@ -16,7 +16,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   activeBackground: "orbit",
   clockStyle: "cyber",
   aiPortalIds: DEFAULT_AI_PORTAL_IDS,
-  techPingDelaySim: true,
   showWorkProgress: false,
   workStart: "09:00",
   workEnd: "17:00",
@@ -78,7 +77,6 @@ export function sanitizeSettings(raw: unknown): UserSettings {
           ),
         ]
       : defaults.aiPortalIds,
-    techPingDelaySim: bool(src.techPingDelaySim, defaults.techPingDelaySim),
     showWorkProgress: bool(src.showWorkProgress, false),
     workStart: toTimeOfDay(src.workStart, "09:00"),
     workEnd: toTimeOfDay(src.workEnd, "17:00"),
@@ -108,15 +106,24 @@ export function isValidPinnedSite(value: unknown): value is PinnedSite {
       site.iconType === "icon" ||
       site.iconType === "custom") &&
     typeof site.iconValue === "string" &&
-    typeof site.visitCount === "number" &&
-    Number.isFinite(site.visitCount) &&
-    (site.category === undefined || typeof site.category === "string") &&
     (site.position === undefined ||
       (typeof site.position === "number" && Number.isInteger(site.position)))
   );
 }
 
-// Keeps only the well-formed entries of a stored/synced site list.
+// Keeps only the well-formed entries of a stored/synced site list, rebuilt from the
+// known fields so ones retired in older versions (visit counts, category tags) are
+// dropped instead of being carried around and synced forever.
 export function sanitizePinnedSites(raw: unknown[]): PinnedSite[] {
-  return raw.filter(isValidPinnedSite);
+  return raw.filter(isValidPinnedSite).map((site) => {
+    const clean: PinnedSite = {
+      id: site.id,
+      title: site.title,
+      url: site.url,
+      iconType: site.iconType,
+      iconValue: site.iconValue,
+    };
+    if (site.position !== undefined) clean.position = site.position;
+    return clean;
+  });
 }

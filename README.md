@@ -14,6 +14,7 @@ A premium, minimal New Tab homepage extension featuring a responsive digital clo
 
 - **Digital Clock & Binary Matrix:** Displays responsive system time in three face styles (Cyber, Minimal, Analog), with an optional binary matrix and a work-shift progress tracker.
 - **Custom Pinned Shortcut Nodes:** Grid launcher for your favorite destinations with customizable network ports, connection labels, and drag-and-drop sorting (or Arrow keys, for keyboard-only reordering).
+- **Quick Launch:** Start typing a pinned site's name in the search bar and it lights up in the grid while the rest fade back; press `Tab` to open the best match. Press `1`–`9` to launch the tile in that slot, and `/` to jump to the search bar from anywhere.
 - **Integrated Search Console:** Directly execute web searches. Supports command routers on the fly (e.g., `/g` for Google, `/d` for DuckDuckGo), plus an inline engine picker that expands within the search bar.
 - **Live System Telemetry:** Simulated CPU diagnostics, latency ping metrics, and packet streams — with counters that ease between values rather than snapping — to create a dynamic cybernetic vibe.
 - **Liquid Glass & Boot Sequence:** Panels are clear, rim-lit glass with a cursor-following light, and each new tab powers on with a short boot animation.

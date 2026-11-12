@@ -9,8 +9,6 @@ export interface PinnedSite {
   url: string;
   iconType: "initials" | "icon" | "custom";
   iconValue: string; // Initials or Lucide icon name or image URL
-  category?: string;
-  visitCount: number;
   position?: number;
 }
 
@@ -43,16 +41,7 @@ export interface UserSettings {
   activeBackground: "orbit" | "starfield" | "grid";
   clockStyle: "cyber" | "minimal" | "analog";
   aiPortalIds: string[];
-  techPingDelaySim: boolean;
   showWorkProgress?: boolean;
   workStart?: string;
   workEnd?: string;
-}
-
-export interface SystemLog {
-  id: string;
-  timestamp: string;
-  module: "SYS" | "NET" | "IO" | "EXT";
-  type: "info" | "success" | "warning" | "packet";
-  message: string;
 }

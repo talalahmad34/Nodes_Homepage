@@ -28,6 +28,7 @@ import {
   TILT_SPRING,
 } from "../lib/motion";
 import { emitPulse } from "../lib/pulseBus";
+import { isTypingTarget } from "../lib/quickLaunch";
 import { trackCursorLight } from "../lib/cursorLight";
 import WarpBurst, { WARP_BURST_MS } from "./WarpBurst";
 import {
@@ -124,16 +125,15 @@ function TiltCard({
 interface PinnedSitesProps {
   settings: UserSettings;
   pinnedSites: PinnedSite[];
-  onAddSite: (site: Omit<PinnedSite, "id" | "visitCount">) => void;
+  onAddSite: (site: Omit<PinnedSite, "id">) => void;
   onEditSite: (site: PinnedSite) => void;
   onDeleteSite: (id: string) => void;
-  onUpdateSiteVisits: (id: string) => void;
   onReorderSites: (sites: PinnedSite[]) => void;
-  addLog: (
-    module: "SYS" | "NET" | "IO" | "EXT",
-    type: "info" | "success" | "warning" | "packet",
-    message: string,
-  ) => void;
+  // Sites matching what's typed in the search bar (null when nothing matches): these
+  // light up and the rest fade back.
+  highlightIds: Set<string> | null;
+  // False while a panel covers the page, so number keys don't launch tiles behind it.
+  shortcutsEnabled: boolean;
 }
 
 export default function PinnedSites({
@@ -142,9 +142,9 @@ export default function PinnedSites({
   onAddSite,
   onEditSite,
   onDeleteSite,
-  onUpdateSiteVisits,
   onReorderSites,
-  addLog,
+  highlightIds,
+  shortcutsEnabled,
 }: PinnedSitesProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   // While the tab is booting, tiles wait for the clock and search bar and then drop
@@ -245,19 +245,10 @@ export default function PinnedSites({
     "initials",
   );
   const [iconValue, setIconValue] = useState("");
-  const [category, setCategory] = useState("");
 
   const handleDragStart = (e: React.DragEvent, positionIndex: number) => {
     setDraggedIdx(positionIndex);
     e.dataTransfer.effectAllowed = "move";
-    const site = sitesWithPositions.find((s) => s.position === positionIndex);
-    if (site) {
-      addLog(
-        "SYS",
-        "info",
-        `Initiated rearrange calibration on node [${site.title}]`,
-      );
-    }
   };
 
   const handleDragOver = (e: React.DragEvent, positionIndex: number) => {
@@ -288,11 +279,6 @@ export default function PinnedSites({
         return s;
       });
       onReorderSites(updated);
-      addLog(
-        "SYS",
-        "success",
-        `Configuration path routed: Moved '${sourceSite.title}' to slot ${targetPosition + 1}`,
-      );
     }
 
     setDraggedIdx(null);
@@ -321,11 +307,6 @@ export default function PinnedSites({
       return s;
     });
     onReorderSites(updated);
-    addLog(
-      "SYS",
-      "success",
-      `Configuration path routed: Moved '${site.title}' to slot ${targetPosition + 1}`,
-    );
   };
 
   const handleGripKeyDown = (e: React.KeyboardEvent, site: PinnedSite) => {
@@ -344,9 +325,7 @@ export default function PinnedSites({
     setUrl("");
     setIconType("initials");
     setIconValue("");
-    setCategory("");
     setIsModalOpen(true);
-    addLog("SYS", "info", "Console opened for registering connection endpoint");
   };
 
   const openEditModal = (site: PinnedSite) => {
@@ -355,13 +334,7 @@ export default function PinnedSites({
     setUrl(site.url);
     setIconType(site.iconType);
     setIconValue(site.iconValue);
-    setCategory(site.category || "");
     setIsModalOpen(true);
-    addLog(
-      "SYS",
-      "info",
-      `Configuration module accessed for endpoint: ${site.title}`,
-    );
   };
 
   const closeModal = () => {
@@ -408,22 +381,14 @@ export default function PinnedSites({
         url: formattedUrl,
         iconType,
         iconValue: valueOfIcon,
-        category: category.trim() || undefined,
       });
-      addLog(
-        "IO",
-        "success",
-        `Bookmark endpoint calibrated and saved: ${title}`,
-      );
     } else {
       onAddSite({
         title: title.trim(),
         url: formattedUrl,
         iconType,
         iconValue: valueOfIcon,
-        category: category.trim() || undefined,
       });
-      addLog("IO", "success", `New bookmark registered: ${title}`);
     }
 
     closeModal();
@@ -448,15 +413,8 @@ export default function PinnedSites({
   // Tiles are real links, so the browser handles everything except a plain left
   // click: Ctrl/Cmd/Shift-click, middle-click and the context menu open the site in
   // a new tab or window natively, and Enter activates a focused tile.
-  const handleCardClick = (e: React.MouseEvent, id: string, url: string) => {
+  const handleCardClick = (e: React.MouseEvent, url: string) => {
     const opensElsewhere = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
-    onUpdateSiteVisits(id);
-    addLog(
-      "NET",
-      "packet",
-      `Socket stream forwarding: routing client interface${opensElsewhere ? " (new tab)" : ""} -> ${url}`,
-    );
-
     launchPacketFrom(e.currentTarget as HTMLElement);
     if (opensElsewhere) return;
 
@@ -467,19 +425,23 @@ export default function PinnedSites({
     }, 380);
   };
 
-  const handleCardMiddleClick = (
-    e: React.MouseEvent,
-    id: string,
-    url: string,
-  ) => {
-    onUpdateSiteVisits(id);
-    addLog(
-      "NET",
-      "packet",
-      `Socket stream forwarding: routing client interface (new tab) -> ${url}`,
-    );
-    launchPacketFrom(e.currentTarget as HTMLElement);
-  };
+  // Number keys 1-9 launch the tile in that grid slot (the "ID" shown on each tile),
+  // unless the user is typing or a panel is open.
+  React.useEffect(() => {
+    if (!shortcutsEnabled || isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (!/^[1-9]$/.test(e.key) || isTypingTarget(e.target)) return;
+      const tile = document.querySelector<HTMLElement>(
+        `a[data-slot="${e.key}"]`,
+      );
+      if (!tile) return;
+      e.preventDefault();
+      tile.click();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [shortcutsEnabled, isModalOpen]);
 
   // Escape closes the add/edit form
   React.useEffect(() => {
@@ -566,8 +528,8 @@ export default function PinnedSites({
           <div className="h-px flex-grow bg-neutral-800/40"></div>
           <div className="text-[11px] uppercase tracking-[0.3em] text-neutral-400 font-mono flex items-center gap-2">
             <LayoutGrid className={`w-3.5 h-3.5 ${colors.text}`} />
-            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [DRAG OR ARROW KEYS
-            TO REARRANGE]
+            PINNED PROTOCOLS // INDEX ({pinnedSites.length}) [KEYS 1-9 TO LAUNCH
+            · DRAG TO REARRANGE]
           </div>
           <div className="h-px flex-grow bg-neutral-800/40 font-mono"></div>
 
@@ -659,13 +621,15 @@ export default function PinnedSites({
           const simIndex = posIndex + 1;
           const isDraggedIdx = draggedIdx === posIndex;
           const isHoveredIdx = hoveredDragIdx === posIndex;
+          const isMatch = highlightIds?.has(site.id) ?? false;
+          const isDimmed = highlightIds !== null && !isMatch;
 
           return (
             <motion.div
               key={site.id}
               initial={{ opacity: 0, y: bootDelay ? -18 : 12, scale: 0.95 }}
               animate={{
-                opacity: isDraggedIdx ? 0.35 : 1,
+                opacity: isDraggedIdx ? 0.35 : isDimmed ? 0.35 : 1,
                 y: 0,
                 scale: 1,
                 transition: {
@@ -702,9 +666,10 @@ export default function PinnedSites({
                 <div
                   className={`absolute -inset-[1px] rounded-xl bg-gradient-to-r from-transparent to-transparent group-hover:from-neutral-800 group-hover:to-neutral-900 transition-all duration-300 pointer-events-none -z-10`}
                   style={{
-                    boxShadow: isHoveredIdx
-                      ? `0 0 18px rgba(${colors.glowRGB}, 0.25)`
-                      : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`,
+                    boxShadow:
+                      isHoveredIdx || isMatch
+                        ? `0 0 18px rgba(${colors.glowRGB}, 0.25)`
+                        : `0 0 16px rgba(${colors.glowRGB}, var(--tw-hover-glow, 0))`,
                   }}
                 />
 
@@ -720,10 +685,17 @@ export default function PinnedSites({
                         ? `border-neutral-500 scale-102 bg-neutral-900/35 shadow-lg shadow-[rgba(${colors.glowRGB},0.08)]`
                         : `border-white/[0.07] ${colors.hoverBorder} hover:bg-neutral-900/35`
                   }`}
-                  onClick={(e) => handleCardClick(e, site.id, site.url)}
+                  data-site-id={site.id}
+                  data-slot={simIndex}
+                  style={
+                    isMatch
+                      ? { borderColor: `rgba(${colors.glowRGB}, 0.6)` }
+                      : undefined
+                  }
+                  onClick={(e) => handleCardClick(e, site.url)}
                   onAuxClick={(e) => {
                     if (e.button === 1) {
-                      handleCardMiddleClick(e, site.id, site.url);
+                      launchPacketFrom(e.currentTarget as HTMLElement);
                     }
                   }}
                 >
@@ -1039,20 +1011,6 @@ export default function PinnedSites({
                     />
                   </div>
                 )}
-
-                {/* Category label field */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-neutral-500 uppercase tracking-wider block">
-                    Category Tag (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="e.g. Development, Social"
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-600 transition-all font-mono"
-                  />
-                </div>
 
                 <div className="flex gap-2 pt-2 justify-end">
                   <motion.button

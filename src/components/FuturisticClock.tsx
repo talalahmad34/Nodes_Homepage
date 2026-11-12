@@ -12,11 +12,6 @@ import { trackCursorLight } from "../lib/cursorLight";
 
 interface FuturisticClockProps {
   settings: UserSettings;
-  addLog: (
-    module: "SYS" | "NET" | "IO" | "EXT",
-    type: "info" | "success" | "warning" | "packet",
-    message: string,
-  ) => void;
 }
 
 // Where the current time falls in the configured work shift.
@@ -474,29 +469,15 @@ function AnalogFace({
   );
 }
 
-export default function FuturisticClock({
-  settings,
-  addLog,
-}: FuturisticClockProps) {
+export default function FuturisticClock({ settings }: FuturisticClockProps) {
   const [time, setTime] = useState(new Date());
   const [pingSim, setPingSim] = useState(12);
   const [packetTx, setPacketTx] = useState(1402);
   const [packetRx, setPacketRx] = useState(3894);
   const [cpuUsageSim, setCpuUsageSim] = useState(18);
 
-  // Keep the latest settings/addLog available to the interval below without needing
-  // to recreate the interval itself every tick (which previously reset every 250ms).
-  const settingsRef = useRef(settings);
-  const addLogRef = useRef(addLog);
-  useEffect(() => {
-    settingsRef.current = settings;
-    addLogRef.current = addLog;
-  }, [settings, addLog]);
-
-  // Tracks the last second we fired telemetry for, so the check below doesn't need to
-  // read the previous `time` state — doing that via setTime's updater fired other
-  // components' setState calls (addLog -> App's setLogs) mid-render, which React flags
-  // as invalid and can cause a render pass to be discarded.
+  // Tracks the last second the simulated readouts were refreshed, so the interval
+  // below doesn't need to read the previous `time` state.
   const lastTelemetrySecondRef = useRef(-1);
 
   useEffect(() => {
@@ -511,19 +492,10 @@ export default function FuturisticClock({
       ) {
         lastTelemetrySecondRef.current = nextSeconds;
 
-        const rndPing = Math.floor(Math.random() * 8) + 8;
-        setPingSim(rndPing);
+        setPingSim(Math.floor(Math.random() * 8) + 8);
         setCpuUsageSim(Math.floor(Math.random() * 15) + 10);
         setPacketTx((prev) => prev + Math.floor(Math.random() * 5) + 1);
         setPacketRx((prev) => prev + Math.floor(Math.random() * 12) + 2);
-
-        if (settingsRef.current.techPingDelaySim) {
-          addLogRef.current(
-            "NET",
-            "packet",
-            `ICMP Echo Request: seq=${nextSeconds} size=64 bytes rtt=${rndPing}ms`,
-          );
-        }
       }
     }, 250);
 

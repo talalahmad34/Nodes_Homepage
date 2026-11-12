@@ -6,7 +6,7 @@
 import {
   useState,
   useEffect,
-  useCallback,
+  useMemo,
   useRef,
   type ChangeEvent,
   type CSSProperties,
@@ -20,7 +20,6 @@ import {
   User,
   Palette,
   Eye,
-  Terminal,
   FolderSync,
   Clock3,
   Sparkles,
@@ -28,7 +27,7 @@ import {
   ArrowDown,
   Check,
 } from "lucide-react";
-import { PinnedSite, UserSettings, SystemLog, SystemTheme } from "./types";
+import { PinnedSite, UserSettings, SystemTheme } from "./types";
 import {
   onSyncChange,
   readLocal,
@@ -41,6 +40,7 @@ import {
   sanitizePinnedSites,
   sanitizeSettings,
 } from "./lib/settings";
+import { matchPinnedSites } from "./lib/quickLaunch";
 import NetworkBackground from "./components/NetworkBackground";
 import FuturisticClock from "./components/FuturisticClock";
 import SearchConsole from "./components/SearchConsole";
@@ -132,8 +132,6 @@ const DEFAULT_SITES: PinnedSite[] = [
     url: "https://google.com",
     iconType: "initials",
     iconValue: "GO",
-    category: "Search",
-    visitCount: 0,
   },
   {
     id: "github",
@@ -141,8 +139,6 @@ const DEFAULT_SITES: PinnedSite[] = [
     url: "https://github.com",
     iconType: "initials",
     iconValue: "GH",
-    category: "Development",
-    visitCount: 0,
   },
   {
     id: "youtube",
@@ -150,8 +146,6 @@ const DEFAULT_SITES: PinnedSite[] = [
     url: "https://youtube.com",
     iconType: "initials",
     iconValue: "YT",
-    category: "Media",
-    visitCount: 0,
   },
   {
     id: "stackoverflow",
@@ -159,8 +153,6 @@ const DEFAULT_SITES: PinnedSite[] = [
     url: "https://stackoverflow.com",
     iconType: "initials",
     iconValue: "SO",
-    category: "Development",
-    visitCount: 0,
   },
 ];
 
@@ -211,34 +203,6 @@ export default function App() {
     );
   });
 
-  const [logs, setLogs] = useState<SystemLog[]>(() => {
-    const bootTime = new Date().toLocaleTimeString("en-US", { hour12: false });
-    const bootLog = (
-      module: SystemLog["module"],
-      type: SystemLog["type"],
-      message: string,
-    ) => ({
-      id: Math.random().toString(36).substring(2, 9),
-      timestamp: bootTime,
-      module,
-      type,
-      message,
-    });
-    return [
-      bootLog(
-        "SYS",
-        "info",
-        "Interactive clock matrix calibrated to physical UTC parameters.",
-      ),
-      bootLog("NET", "info", "Established listening channel on port 3000."),
-      bootLog(
-        "SYS",
-        "success",
-        "NETGRID core system initialized successfully.",
-      ),
-    ];
-  });
-  const [isLogPanelOpen, setIsLogPanelOpen] = useState(false);
   const [telemetryStatus, setTelemetryStatus] = useState<{
     ok: boolean;
     message: string;
@@ -363,37 +327,29 @@ export default function App() {
     }
   }, []);
 
-  // System actions telemetry log callback function, stabilized safely to prevent triggers
-  const addLog = useCallback(
-    (
-      module: "SYS" | "NET" | "IO" | "EXT",
-      type: "info" | "success" | "warning" | "packet",
-      message: string,
-    ) => {
-      const formattedDate = new Date();
-      const ts = formattedDate.toLocaleTimeString("en-US", { hour12: false });
-
-      setLogs((prev) => [
-        {
-          id: Math.random().toString(36).substring(2, 9),
-          timestamp: ts,
-          module,
-          type,
-          message,
-        },
-        ...prev.slice(0, 49), // Max 50 rows of history cache
-      ]);
-    },
-    [],
+  // Quick launch: what's being typed in the search bar, matched against pinned sites.
+  // The best match can be opened with Tab; every match lights up in the grid.
+  const [quickQuery, setQuickQuery] = useState("");
+  const quickMatches = useMemo(
+    () => matchPinnedSites(quickQuery, pinnedSites),
+    [quickQuery, pinnedSites],
   );
+  const quickMatchIds = useMemo(
+    () =>
+      quickMatches.length > 0 ? new Set(quickMatches.map((s) => s.id)) : null,
+    [quickMatches],
+  );
+  // Clicks the tile itself, so it launches exactly as a mouse click would.
+  const openQuickMatch = () => {
+    const top = quickMatches[0];
+    if (!top) return;
+    document
+      .querySelector<HTMLElement>(`a[data-site-id="${CSS.escape(top.id)}"]`)
+      ?.click();
+  };
 
   const updateSettingField = (key: keyof UserSettings, value: any) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
-    addLog(
-      "SYS",
-      "success",
-      `Configuration calibration updated: ${key} -> ${value}`,
-    );
   };
 
   // Toggles a model portal in/out of the pinned row; newly enabled ones are appended
@@ -406,11 +362,6 @@ export default function App() {
         : [...prev.aiPortalIds, id];
       return { ...prev, aiPortalIds: next };
     });
-    addLog(
-      "SYS",
-      "success",
-      `AI portal node ${settings.aiPortalIds.includes(id) ? "unpinned" : "pinned"}: ${id}`,
-    );
   };
 
   const moveAiPortal = (id: string, direction: -1 | 1) => {
@@ -424,11 +375,10 @@ export default function App() {
     });
   };
 
-  const handleAddSite = (site: Omit<PinnedSite, "id" | "visitCount">) => {
+  const handleAddSite = (site: Omit<PinnedSite, "id">) => {
     const newSite: PinnedSite = {
       ...site,
       id: Math.random().toString(36).substring(2, 9),
-      visitCount: 0,
     };
     setPinnedSites((prev) => [...prev, newSite]);
   };
@@ -443,20 +393,7 @@ export default function App() {
     const target = pinnedSites.find((s) => s.id === id);
     if (target) {
       setPinnedSites((prev) => prev.filter((s) => s.id !== id));
-      addLog(
-        "IO",
-        "warning",
-        `Connection node removed from active index: ${target.title}`,
-      );
     }
-  };
-
-  const handleIncrementVisit = (id: string) => {
-    setPinnedSites((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, visitCount: s.visitCount + 1 } : s,
-      ),
-    );
   };
 
   // Shared entry point for both the paste-to-restore textarea and the file-upload import —
@@ -464,11 +401,6 @@ export default function App() {
   const applyBackupPayload = (raw: string) => {
     const payload = parseBackupPayload(raw);
     if (!payload) {
-      addLog(
-        "SYS",
-        "warning",
-        "Restoration sequence failed: Invalid segment format",
-      );
       setTelemetryStatus({
         ok: false,
         message: "Please provide a valid backup JSON format.",
@@ -481,9 +413,8 @@ export default function App() {
       setSettings((prev) => sanitizeSettings({ ...prev, ...payload.settings }));
     }
     if (payload.pinnedSites) {
-      setPinnedSites(payload.pinnedSites);
+      setPinnedSites(sanitizePinnedSites(payload.pinnedSites));
     }
-    addLog("SYS", "success", "System backup telemetry successfully restored");
     setTelemetryStatus({ ok: true, message: "Backup restored successfully." });
     setTimeout(() => setTelemetryStatus(null), 4000);
   };
@@ -498,11 +429,6 @@ export default function App() {
     link.download = `nodes-homepage-backup-${dateStamp}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    addLog(
-      "SYS",
-      "success",
-      "Telemetry configuration backup downloaded as file",
-    );
   };
 
   const handleImportBackupFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -632,13 +558,16 @@ export default function App() {
       {/* Main Body Centered Column */}
       <main className="w-full max-w-none px-6 sm:px-10 flex flex-col items-center justify-start pt-3 sm:pt-5 md:pt-6 space-y-2 md:space-y-3 lg:space-y-3.5 flex-grow z-10 py-1 sm:py-1.5">
         {/* 1. Futuristic Digital Clock Widget */}
-        <FuturisticClock settings={settings} addLog={addLog} />
+        <FuturisticClock settings={settings} />
 
         {/* 2. Interactive Search terminal bar */}
         <SearchConsole
           settings={settings}
           updateSettings={updateSettingField}
-          addLog={addLog}
+          shortcutsEnabled={!isSettingsOpen}
+          onQueryChange={setQuickQuery}
+          topMatch={quickMatches[0] ?? null}
+          onOpenMatch={openQuickMatch}
         />
 
         {/* 3. Pinned custom shortcut grid items */}
@@ -648,9 +577,9 @@ export default function App() {
           onAddSite={handleAddSite}
           onEditSite={handleEditSite}
           onDeleteSite={handleDeleteSite}
-          onUpdateSiteVisits={handleIncrementVisit}
           onReorderSites={(reorderedSites) => setPinnedSites(reorderedSites)}
-          addLog={addLog}
+          highlightIds={quickMatchIds}
+          shortcutsEnabled={!isSettingsOpen}
         />
       </main>
 
@@ -666,24 +595,6 @@ export default function App() {
           </span>
         </div>
         <div className="flex gap-3 items-center font-medium">
-          <motion.button
-            whileHover={BTN_HOVER}
-            whileTap={BTN_TAP}
-            transition={BTN_SPRING}
-            onClick={() => setIsLogPanelOpen((prev) => !prev)}
-            aria-label={isLogPanelOpen ? "Hide system log" : "Show system log"}
-            aria-expanded={isLogPanelOpen}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-colors cursor-pointer normal-case tracking-normal ${
-              isLogPanelOpen
-                ? "border-neutral-700 text-white bg-neutral-900"
-                : "border-transparent text-neutral-500 hover:text-neutral-300"
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span className="text-[10px] uppercase tracking-wider hidden sm:inline">
-              System Log
-            </span>
-          </motion.button>
           <div className="flex gap-1.5 items-center">
             <div
               className="w-1.5 h-3 rounded-xs"
@@ -703,75 +614,6 @@ export default function App() {
           <span className="text-neutral-300">Secure Node Session Active</span>
         </div>
       </footer>
-
-      {/* Collapsible System Log Panel — surfaces the telemetry events already being recorded */}
-      <AnimatePresence>
-        {isLogPanelOpen && (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 20, opacity: 0 }}
-            transition={{ type: "spring", damping: 28, stiffness: 220 }}
-            className="fixed bottom-3 right-3 sm:right-5 z-40 w-[calc(100%-1.5rem)] sm:w-96 max-h-64 bg-neutral-950/95 border border-neutral-800 rounded-xl shadow-2xl backdrop-blur-md font-mono overflow-hidden flex flex-col"
-            id="system-log-panel"
-          >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-900">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-400 font-bold flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5" />
-                System Log
-              </span>
-              <motion.button
-                whileHover={{ scale: 1.15, rotate: 90 }}
-                whileTap={{ scale: 0.85 }}
-                transition={BTN_SPRING}
-                onClick={() => setIsLogPanelOpen(false)}
-                aria-label="Close system log"
-                className="p-1 rounded hover:bg-neutral-900 text-neutral-500 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </motion.button>
-            </div>
-            <div
-              className="overflow-y-auto scrollbar-thin px-3 py-2 space-y-1 text-[10.5px]"
-              role="log"
-              aria-live="polite"
-              aria-label="System telemetry log"
-            >
-              {logs.length === 0 && (
-                <div className="text-neutral-600 py-4 text-center">
-                  No events recorded yet.
-                </div>
-              )}
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-start gap-2 text-neutral-400"
-                >
-                  <span className="text-neutral-600 shrink-0">
-                    {log.timestamp}
-                  </span>
-                  <span
-                    className={`shrink-0 font-bold ${
-                      log.type === "success"
-                        ? "text-emerald-400"
-                        : log.type === "warning"
-                          ? "text-amber-400"
-                          : log.type === "packet"
-                            ? "text-cyan-400"
-                            : "text-neutral-500"
-                    }`}
-                  >
-                    [{log.module}]
-                  </span>
-                  <span className="text-neutral-300 break-words">
-                    {log.message}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Slide-out Terminal Settings Drawer Panel */}
       <AnimatePresence>
@@ -1129,23 +971,6 @@ export default function App() {
                     />
                   </label>
 
-                  {/* ICMP Packet Logging Toggle */}
-                  <label className="flex items-center justify-between text-xs text-neutral-350 hover:text-white cursor-pointer py-1.5">
-                    <span>Simulated Networking Pings Log</span>
-                    <input
-                      type="checkbox"
-                      checked={settings.techPingDelaySim}
-                      onChange={(e) =>
-                        updateSettingField("techPingDelaySim", e.target.checked)
-                      }
-                      className="sr-only"
-                    />
-                    <ToggleTrack
-                      checked={settings.techPingDelaySim}
-                      accent={currentTheme.accent}
-                    />
-                  </label>
-
                   {/* Work Hours Progress Tracker Toggle */}
                   <label className="flex items-center justify-between text-xs text-neutral-350 hover:text-white cursor-pointer py-1.5">
                     <span>Work Hours Tracker overlay</span>
@@ -1159,13 +984,6 @@ export default function App() {
                           workStart: prev.workStart || "09:00",
                           workEnd: prev.workEnd || "17:00",
                         }));
-                        addLog(
-                          "SYS",
-                          "success",
-                          e.target.checked
-                            ? "Work tracker activated: adjust shift times below"
-                            : "Work tracker deactivated",
-                        );
                       }}
                       className="sr-only"
                     />
@@ -1252,11 +1070,6 @@ export default function App() {
                         if (telemetryRef.current) {
                           navigator.clipboard.writeText(
                             telemetryRef.current.value,
-                          );
-                          addLog(
-                            "SYS",
-                            "success",
-                            "Telemetry configuration backup string copied to clipboard",
                           );
                         }
                       }}

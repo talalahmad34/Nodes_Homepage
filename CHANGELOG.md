@@ -2,6 +2,24 @@
 
 All notable changes to the **Nodes Homepage Extension** project will be documented in this file.
 
+## [1.8.0] - 2026-11-12
+
+### Added
+
+- **Quick Launch**: the search bar now doubles as a launcher for your pinned nodes. As you type, every node whose name or address matches lights up in the grid and the others fade back, and the best match appears as a chip in the search bar. Press `Tab` (or click the chip) to open it with the usual launch burst; `Enter` still runs a normal web search.
+- **Number-key launch**: press `1`–`9` anywhere on the page to open the node in that grid slot (the ID shown on each tile).
+- **Search shortcuts**: `/` jumps to the search bar from anywhere, and `Escape` clears what you typed.
+
+### Changed
+
+- **Lighter sync**: opening a pinned node no longer rewrites your whole node list to Chrome sync. Previously every click bumped a hidden visit counter and re-saved everything.
+
+### Removed
+
+- **Visit counter**: it was recorded on every click but never shown anywhere.
+- **Category tag** in the add/edit node form: it was saved but never used. Existing tags and visit counts are dropped from saved data automatically; nodes, order and icons are untouched.
+- **System Log panel** and the "Simulated Networking Pings Log" setting: the log only held generated flavour messages, not real events.
+
 ## [1.7.0] - 2026-10-11
 
 ### Added
